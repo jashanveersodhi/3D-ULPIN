@@ -1,117 +1,126 @@
 import React, { useState } from 'react';
 import {
-  LayoutDashboard,
-  Box,
-  TableProperties,
-  Search,
-  CheckCircle,
-  BarChart3,
-  Info,
-  Presentation,
-  PlayCircle,
-  Menu,
-  X,
-  Layers
+  LayoutDashboard, Map, Box, Cpu, Layers, Hash,
+  Database, Settings, ChevronLeft, ChevronRight, Menu, X,
+  TableProperties, Search, CheckCircle, Info, Maximize2
 } from 'lucide-react';
+import { useStore } from '../../data/store';
 
-const Layout = ({ children, activePage, setActivePage, isPresentation, setIsPresentation }) => {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+const NAV_ITEMS = [
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { id: 'map2d', label: '2D Map', icon: Map },
+  { id: 'map3d', label: '3D Property Map', icon: Box },
+  { id: 'extraction', label: 'AI Extraction', icon: Cpu },
+  { id: 'ulpin', label: 'ULPIN', icon: Hash },
+  { id: 'registry', label: 'Property Registry', icon: TableProperties },
+  { id: 'search', label: 'Search', icon: Search },
+  { id: 'validation', label: 'Validation', icon: CheckCircle },
+  { id: 'spatial', label: 'Spatial Data', icon: Database },
+  { id: 'analytics', label: 'Analytics', icon: Layers },
+  { id: 'about', label: 'About Prototype', icon: Info },
+  { id: 'settings', label: 'Settings', icon: Settings },
+];
 
-  const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'map', label: '3D Property Map', icon: Box },
-    { id: 'registry', label: 'Property Registry', icon: TableProperties },
-    { id: 'search', label: 'Search', icon: Search },
-    { id: 'validation', label: 'Validation', icon: CheckCircle },
-    { id: 'analytics', label: 'Analytics', icon: BarChart3 },
-    { id: 'about', label: 'About Prototype', icon: Info },
-  ];
+const Layout = ({ children }) => {
+  const { activePage, setActivePage, sidebarCollapsed, toggleSidebar } = useStore();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  if (isPresentation) {
-    return (
-      <div className="min-h-screen bg-slate-100 p-6">
-        <div className="flex justify-between items-center mb-8">
-          <div className="flex items-center gap-4">
-            <div className="bg-blue-600 text-white p-3 rounded-2xl">
-              <Box size={28} />
-            </div>
-            <div>
-              <h1 className="text-3xl font-black text-slate-900">3D ULPIN</h1>
-              <p className="text-sm text-slate-500">Vertical Property Identification</p>
-            </div>
-          </div>
-          <button
-            onClick={() => setIsPresentation(false)}
-            className="px-4 py-2 bg-white border rounded-xl flex items-center gap-2"
-          >
-            <X size={18} /> Exit
-          </button>
-        </div>
-        {children}
-      </div>
-    );
-  }
+  const handleNav = (page) => {
+    setActivePage(page);
+    setMobileMenuOpen(false);
+  };
 
   return (
-    <div className="flex h-screen w-full bg-slate-100 font-sans">
-      <aside className={`bg-slate-900 text-white transition-all duration-300 ${isSidebarOpen ? 'w-64' : 'w-20'} flex flex-col border-r border-slate-800`}>
-        <div className="p-6 border-b border-slate-800">
-          {isSidebarOpen ? (
-            <div className="flex items-center gap-3">
-              <Box className="text-blue-400" size={20} />
-              <span className="text-xl font-bold">3D ULPIN</span>
+    <div className="flex h-screen w-full bg-gis-bg overflow-hidden">
+      {/* Mobile overlay */}
+      {mobileMenuOpen && (
+        <div
+          className="fixed inset-0 bg-black/60 z-40 lg:hidden"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <aside
+        className={`fixed lg:relative z-50 h-full bg-gis-panel border-r border-gis-border flex flex-col transition-all duration-300 ${
+          sidebarCollapsed ? 'w-16' : 'w-64'
+        } ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
+      >
+        {/* Logo */}
+        <div className={`p-4 border-b border-gis-border flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'}`}>
+          <div className="w-8 h-8 rounded-lg bg-gis-accent flex items-center justify-center shrink-0">
+            <Box size={18} className="text-white" />
+          </div>
+          {!sidebarCollapsed && (
+            <div className="overflow-hidden">
+              <h1 className="text-base font-bold text-gis-ink whitespace-nowrap">3D ULPIN</h1>
+              <p className="text-[10px] text-gis-muted whitespace-nowrap">Spatial Registry Platform</p>
             </div>
-          ) : (
-            <div className="flex justify-center"><Box className="text-blue-400" size={24} /></div>
           )}
         </div>
 
-        <nav className="flex-1 p-4 space-y-2">
-          {navItems.map((item) => (
+        {/* Nav */}
+        <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
+          {NAV_ITEMS.map((item) => (
             <button
               key={item.id}
-              onClick={() => setActivePage(item.id)}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-                activePage === item.id ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+              onClick={() => handleNav(item.id)}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 text-sm font-medium ${
+                activePage === item.id
+                  ? 'bg-gis-accent/10 text-gis-accent border border-gis-accent/20'
+                  : 'text-gis-muted hover:text-gis-ink hover:bg-gis-surface border border-transparent'
               }`}
+              title={sidebarCollapsed ? item.label : undefined}
             >
-              <item.icon size={20} />
-              {isSidebarOpen && <span className="text-sm font-medium">{item.label}</span>}
+              <item.icon size={18} className="shrink-0" />
+              {!sidebarCollapsed && <span className="whitespace-nowrap">{item.label}</span>}
             </button>
           ))}
-          <button
-            onClick={() => setActivePage('extraction')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-              activePage === 'extraction' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-            }`}
-          >
-            <Layers size={20} />
-            {isSidebarOpen && <span className="text-sm font-medium">AI Extraction</span>}
-          </button>
         </nav>
+
+        {/* Collapse toggle - desktop */}
+        <div className="hidden lg:block p-3 border-t border-gis-border">
+          <button
+            onClick={toggleSidebar}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-gis-muted hover:text-gis-ink hover:bg-gis-surface transition-all text-sm"
+          >
+            {sidebarCollapsed ? <ChevronRight size={16} /> : <><ChevronLeft size={16} /><span>Collapse</span></>}
+          </button>
+        </div>
+
+        {/* Mobile close */}
+        <div className="lg:hidden p-3 border-t border-gis-border">
+          <button
+            onClick={() => setMobileMenuOpen(false)}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-gis-muted hover:text-gis-ink hover:bg-gis-surface transition-all text-sm"
+          >
+            <X size={16} /><span>Close</span>
+          </button>
+        </div>
       </aside>
 
-      <div className="flex-1 flex flex-col min-w-0 relative">
-        <header className="h-16 bg-white border-b px-8 flex items-center justify-between z-10">
-          <div className="flex items-center gap-6">
-            <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 hover:bg-slate-100 rounded-lg text-slate-600">
+      {/* Main */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Top bar */}
+        <header className="h-14 bg-gis-panel border-b border-gis-border flex items-center justify-between px-4 shrink-0 z-30">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setMobileMenuOpen(true)}
+              className="lg:hidden p-2 rounded-lg text-gis-muted hover:text-gis-ink hover:bg-gis-surface"
+            >
               <Menu size={20} />
             </button>
-            <h2 className="text-lg font-bold text-slate-900">
-              {navItems.find(i => i.id === activePage)?.label || 'AI Extraction'}
+            <h2 className="text-sm font-semibold text-gis-ink">
+              {NAV_ITEMS.find(i => i.id === activePage)?.label || 'Dashboard'}
             </h2>
           </div>
-          <div className="flex items-center gap-4">
-            <button onClick={() => setIsPresentation(true)} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 border rounded-lg hover:bg-slate-200">
-              Presentation
-            </button>
-            <button onClick={() => setActivePage('demo')} className="px-4 py-2 text-sm font-bold text-white bg-blue-600 rounded-lg shadow-md hover:bg-blue-700">
-              Start Demo
-            </button>
+          <div className="flex items-center gap-2">
+            <span className="badge-warning text-[10px]">Demo / Prototype</span>
           </div>
         </header>
 
-        <main className="p-8 overflow-auto h-full">
+        {/* Content */}
+        <main className="flex-1 overflow-auto">
           {children}
         </main>
       </div>

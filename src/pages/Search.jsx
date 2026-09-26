@@ -1,23 +1,22 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Search as SearchIcon, Loader2, ArrowRight, MapPin } from 'lucide-react';
+import { useStore } from '../data/store';
+import Card, { CardBody } from '../components/ui/Card';
+import StatusBadge from '../components/ui/StatusBadge';
 
-const SearchPage = ({ store, onSelectRecord }) => {
-  const { properties } = store;
+const SearchPage = () => {
+  const { units, setActivePage } = useStore();
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [results, setResults] = useState([]);
 
   const handleSearch = (val) => {
     setQuery(val);
-    if (!val) {
-      setResults([]);
-      return;
-    }
-
+    if (!val) { setResults([]); return; }
     setIsSearching(true);
     setTimeout(() => {
-      const filtered = properties.filter(p =>
-        `${p.ulpin} ${p.unit} ${p.type} ${p.floor} ${p.buildingId}`.toLowerCase().includes(val.toLowerCase())
+      const filtered = units.filter(u =>
+        `${u.ulpin} ${u.unitNumber} ${u.type} ${u.floorLevel} ${u.buildingId}`.toLowerCase().includes(val.toLowerCase())
       ).slice(0, 12);
       setResults(filtered);
       setIsSearching(false);
@@ -25,79 +24,67 @@ const SearchPage = ({ store, onSelectRecord }) => {
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-10 animate-fade-in-up">
-      <div className="card-premium p-12 text-center relative overflow-hidden">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-64 h-64 bg-gis-accent/10 blur-3xl rounded-full pointer-events-none" />
-
-        <div className="relative z-10">
-          <div className="flex justify-center mb-6">
-            <div className="p-4 bg-gis-accent/20 text-gis-accent rounded-3xl">
-              <SearchIcon size={32} />
+    <div className="p-6 max-w-4xl mx-auto space-y-6 animate-fade-in">
+      <Card>
+        <CardBody className="text-center py-8">
+          <div className="flex justify-center mb-4">
+            <div className="p-3 rounded-2xl bg-gis-accent/10">
+              <SearchIcon size={28} className="text-gis-accent" />
             </div>
           </div>
-          <h3 className="text-3xl font-black text-gis-ink mb-3 tracking-tight">Global Spatial Search</h3>
-          <p className="text-gis-muted max-w-xl mx-auto mb-10 font-medium">
-            Instantly locate any property unit by its identifier, floor, or type across the global 3D registry.
+          <h2 className="text-2xl font-bold text-gis-ink mb-2">Global Spatial Search</h2>
+          <p className="text-sm text-gis-muted mb-6 max-w-lg mx-auto">
+            Instantly locate any property unit by its ULPIN, floor, or type across the spatial registry.
           </p>
-
-          <div className="relative max-w-2xl mx-auto group">
-            <SearchIcon className="absolute left-5 top-1/2 -translate-y-1/2 text-gis-muted group-focus-within:text-gis-accent transition-colors" size={24} />
+          <div className="relative max-w-xl mx-auto">
+            <SearchIcon size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-gis-muted" />
             <input
               type="text"
-              className="w-full pl-14 pr-16 py-5 text-xl bg-gis-bg border border-gis-line rounded-2xl focus:ring-4 focus:ring-gis-accent/20 focus:border-gis-accent outline-none transition-all text-gis-ink placeholder:text-gis-muted shadow-inner"
-              placeholder="Try 'Floor 25', 'Unit 25A', 'PROTOTYPE-ESB-F025-U001'..."
+              className="w-full pl-12 pr-12 py-3.5 bg-gis-surface border border-gis-border rounded-xl text-gis-ink placeholder:text-gis-muted/60 outline-none focus:border-gis-accent/50 focus:ring-2 focus:ring-gis-accent/20 transition-all"
+              placeholder="Try 'ULPIN-UN-0001', 'Floor 3', '2BHK'..."
               value={query}
               onChange={(e) => handleSearch(e.target.value)}
             />
             {isSearching && (
-              <div className="absolute right-5 top-1/2 -translate-y-1/2">
-                <Loader2 className="animate-spin text-gis-accent" size={24} />
+              <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                <Loader2 size={20} className="animate-spin text-gis-accent" />
               </div>
             )}
           </div>
-        </div>
-      </div>
+        </CardBody>
+      </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {results.length > 0 ? (
-          results.map((p, i) => (
-            <div
-              key={i}
-              onClick={() => onSelectRecord(p)}
-              className="card-premium p-6 cursor-pointer group relative overflow-hidden transition-all duration-300 hover:-translate-y-1"
-            >
-              <div className="absolute top-0 right-0 p-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                <MapPin size={16} className="text-gis-accent" />
-              </div>
-
-              <div className="flex justify-between items-start mb-4">
-                <span className="font-mono text-sm font-black text-gis-accent tracking-tighter">{p.ulpin}</span>
-                <span className={`px-3 py-1 rounded-full text-[10px] font-bold border transition-colors ${
-                  p.status === 'Validated' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-amber-500/10 text-amber-500 border-amber-500/20'
-                }`}>
-                  {p.status}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-y-3 text-xs">
-                <span className="text-gis-muted font-medium">Building:</span> <span className="text-gis-ink font-bold text-right">{p.buildingId}</span>
-                <span className="text-gis-muted font-medium">Floor:</span> <span className="text-gis-ink font-bold text-right">{p.floor}</span>
-                <span className="text-gis-muted font-medium">Unit:</span> <span className="text-gis-ink font-bold text-right">{p.unit}</span>
-                <span className="text-gis-muted font-medium">Type:</span> <span className="text-gis-ink font-bold text-right">{p.type}</span>
-              </div>
-
-              <div className="mt-6 flex items-center justify-center gap-2 py-2 rounded-xl bg-gis-bg border border-gis-line text-xs font-black text-gis-accent opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-2 group-hover:translate-y-0">
-                Locate in 3D Space <ArrowRight size={14} />
-              </div>
-            </div>
+          results.map((u) => (
+            <Card key={u.id} hover>
+              <CardBody>
+                <div className="flex justify-between items-start mb-3">
+                  <span className="font-mono text-xs text-gis-accent font-bold truncate max-w-[140px]" title={u.ulpin}>{u.ulpin}</span>
+                  <StatusBadge status={u.status} />
+                </div>
+                <div className="grid grid-cols-2 gap-y-2 text-xs">
+                  <span className="text-gis-muted">Type:</span>
+                  <span className="text-gis-ink font-medium text-right">{u.type}</span>
+                  <span className="text-gis-muted">Floor:</span>
+                  <span className="text-gis-ink font-medium text-right">{u.floorLevel}</span>
+                  <span className="text-gis-muted">Area:</span>
+                  <span className="text-gis-ink font-medium text-right">{u.area.toLocaleString()} m²</span>
+                </div>
+                <button
+                  onClick={() => useStore.getState().selectUnit(u) || setActivePage('ulpin')}
+                  className="mt-4 w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-gis-surface border border-gis-border text-xs font-semibold text-gis-accent hover:bg-gis-accent/10 transition-all"
+                >
+                  View Details <ArrowRight size={12} />
+                </button>
+              </CardBody>
+            </Card>
           ))
         ) : (
           query && !isSearching && (
-            <div className="col-span-full py-20 text-center text-gis-muted animate-fade-in-up">
-              <div className="flex flex-col items-center gap-4 opacity-40">
-                <SearchIcon size={48} />
-                <p className="font-medium">No spatial records found matching your query.</p>
-              </div>
+            <div className="col-span-full py-16 text-center">
+              <SearchIcon size={40} className="mx-auto text-gis-muted/20 mb-3" />
+              <p className="text-sm text-gis-muted">No spatial records found matching your query.</p>
             </div>
           )
         )}

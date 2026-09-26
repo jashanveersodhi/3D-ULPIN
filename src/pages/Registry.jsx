@@ -1,167 +1,137 @@
 import React, { useState, useMemo } from 'react';
 import { Download, Plus, Search as SearchIcon, Filter } from 'lucide-react';
-import { PROPERTY_TYPES } from '../data/store';
+import { useStore } from '../data/store';
+import Card, { CardBody, CardHeader, CardTitle } from '../components/ui/Card';
+import StatusBadge from '../components/ui/StatusBadge';
+import Button from '../components/ui/Button';
+import EmptyState from '../components/ui/EmptyState';
 
-const Registry = ({ store }) => {
-  const { properties } = store;
+const PROPERTY_TYPES = ['Residential', 'Commercial', 'Office', 'Retail', 'Mixed-Use', 'Industrial'];
+
+const Registry = () => {
+  const { units, buildings, addActivity } = useStore();
   const [searchTerm, setSearchTerm] = useState('');
-  const [floorFilter, setFloorFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [sortBy, setSortBy] = useState('floor');
+  const [sortBy, setSortBy] = useState('id');
 
-  const filteredProperties = useMemo(() => {
-    return properties
-      .filter(p => {
-        const matchesSearch = !searchTerm || JSON.stringify(p).toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesFloor = !floorFilter || p.floor === parseInt(floorFilter);
-        const matchesType = !typeFilter || p.type === typeFilter;
-        const matchesStatus = !statusFilter || p.status === statusFilter;
-        return matchesSearch && matchesFloor && matchesType && matchesStatus;
+  const filteredUnits = useMemo(() => {
+    return units
+      .filter(u => {
+        const matchesSearch = !searchTerm || u.ulpin.toLowerCase().includes(searchQuery.toLowerCase()) || u.id.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesType = !typeFilter || u.type === typeFilter;
+        const matchesStatus = !statusFilter || u.status === statusFilter;
+        return matchesSearch && matchesType && matchesStatus;
       })
       .sort((a, b) => {
-        if (sortBy === 'floor') return a.floor - b.floor;
         if (sortBy === 'area') return b.area - a.area;
-        return a.ulpin.localeCompare(b.ulpin);
+        if (sortBy === 'floor') return a.floorLevel - b.floorLevel;
+        return a.id.localeCompare(b.id);
       });
-  }, [properties, searchTerm, floorFilter, typeFilter, statusFilter, sortBy]);
+  }, [units, searchTerm, typeFilter, statusFilter, sortBy]);
 
   const exportCSV = () => {
-    const cols = ["ulpin", "buildingId", "floor", "unit", "type", "area", "zBottom", "zTop", "x", "y", "z", "status", "updated"];
+    const cols = ['id', 'ulpin', 'buildingId', 'parcelId', 'floorLevel', 'unitNumber', 'type', 'area', 'status'];
     const csv = [
-      cols.join(","),
-      ...filteredProperties.map(r => cols.map(k => `"${String(r[k]).replaceAll('"', '""')}"`).join(","))
-    ].join("\n");
-
+      cols.join(','),
+      ...filteredUnits.map(r => cols.map(k => `"${String(r[k] ?? '').replaceAll('"', '""')}"`).join(','))
+    ].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'sih26011_property_registry.csv';
+    a.download = 'property_registry.csv';
     a.click();
     URL.revokeObjectURL(url);
+    addActivity('Registry exported as CSV', 'success');
+  };
+
+  const handleAddProperty = () => {
+    addActivity('Add Property form opened (demo)', 'info');
   };
 
   return (
-    <div className="card-premium p-8 animate-fade-in-up">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10">
+    <div className="p-6 space-y-6 bg-overlay min-h-full animate-fade-in max-w-6xl mx-auto">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h3 className="text-2xl font-black text-gis-ink tracking-tight">Property Registry</h3>
-          <p className="text-sm text-gis-muted font-medium">Comprehensive 3D spatial property database</p>
+          <h1 className="text-2xl font-bold text-gis-ink">Property Registry</h1>
+          <p className="text-sm text-gis-muted mt-1">Comprehensive spatial property database with hierarchical ULPINs</p>
         </div>
-        <div className="flex gap-3 w-full md:w-auto">
-          <button
-            onClick={exportCSV}
-            className="btn-premium flex-1 md:flex-none flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-bold text-gis-muted bg-gis-bg border border-gis-line hover:text-gis-ink"
-          >
-            <Download size={18} /> Export CSV
-          </button>
-          <button
-            className="btn-premium flex-1 md:flex-none flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-bold text-white bg-gis-accent shadow-lg shadow-gis-accent/20"
-          >
-            <Plus size={18} /> Add Property
-          </button>
+        <div className="flex gap-2">
+          <Button variant="secondary" icon={Download} onClick={exportCSV}>Export CSV</Button>
+          <Button icon={Plus} onClick={handleAddProperty}>Add Property</Button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8 p-6 rounded-2xl bg-gis-bg border border-gis-line">
-        <div className="md:col-span-2 relative group">
-          <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-gis-muted group-focus-within:text-gis-accent transition-colors" size={18} />
-          <input
-            type="text"
-            placeholder="Search ID, floor, unit, type..."
-            className="w-full pl-11 pr-4 py-2.5 text-sm bg-gis-card border border-gis-line rounded-xl focus:ring-2 focus:ring-gis-accent/30 outline-none transition-all text-gis-ink placeholder:text-gis-muted"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
-        <select
-          className="px-4 py-2.5 text-sm bg-gis-card border border-gis-line rounded-xl outline-none text-gis-ink font-medium focus:ring-2 focus:ring-gis-accent/30 transition-all cursor-pointer"
-          value={floorFilter}
-          onChange={(e) => setFloorFilter(e.target.value)}
-        >
-          <option value="">All floors</option>
-          {Array.from(new Set(properties.map(p => p.floor))).sort((a, b) => a - b).map(f => (
-            <option key={f} value={f}>Floor {f}</option>
-          ))}
-        </select>
-        <select
-          className="px-4 py-2.5 text-sm bg-gis-card border border-gis-line rounded-xl outline-none text-gis-ink font-medium focus:ring-2 focus:ring-gis-accent/30 transition-all cursor-pointer"
-          value={typeFilter}
-          onChange={(e) => setTypeFilter(e.target.value)}
-        >
-          <option value="">All types</option>
-          {PROPERTY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-        </select>
-        <select
-          className="px-4 py-2.5 text-sm bg-gis-card border border-gis-line rounded-xl outline-none text-gis-ink font-medium focus:ring-2 focus:ring-gis-accent/30 transition-all cursor-pointer"
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-        >
-          <option value="">All status</option>
-          <option value="Validated">Validated</option>
-          <option value="Pending">Pending</option>
-          <option value="Needs Review">Needs Review</option>
-        </select>
-        <select
-          className="px-4 py-2.5 text-sm bg-gis-card border border-gis-line rounded-xl outline-none text-gis-ink font-medium focus:ring-2 focus:ring-gis-accent/30 transition-all cursor-pointer"
-          value={sortBy}
-          onChange={(e) => setSortBy(e.target.value)}
-        >
-          <option value="floor">Sort by Floor</option>
-          <option value="area">Sort by Area</option>
-          <option value="ulpin">Sort by Identifier</option>
-        </select>
-      </div>
+      <Card>
+        <CardBody>
+          <div className="flex flex-wrap gap-3">
+            <div className="relative flex-1 min-w-[200px]">
+              <SearchIcon size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gis-muted" />
+              <input
+                type="text"
+                placeholder="Search ULPIN, unit ID..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="input input-search"
+              />
+            </div>
+            <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="select w-auto">
+              <option value="">All Types</option>
+              {PROPERTY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="select w-auto">
+              <option value="">All Status</option>
+              <option value="Validated">Validated</option>
+              <option value="Pending">Pending</option>
+            </select>
+            <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="select w-auto">
+              <option value="id">Sort by ID</option>
+              <option value="area">Sort by Area</option>
+              <option value="floor">Sort by Floor</option>
+            </select>
+          </div>
+        </CardBody>
+      </Card>
 
-      <div className="overflow-x-auto border border-gis-line rounded-2xl bg-gis-card shadow-sm">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-gis-bg/50 text-gis-muted border-b border-gis-line">
-            <tr className="uppercase tracking-widest text-[10px] font-black">
-              <th className="px-6 py-4">3D ULPIN</th>
-              <th className="px-6 py-4">Building</th>
-              <th className="px-6 py-4">Floor</th>
-              <th className="px-6 py-4">Unit</th>
-              <th className="px-6 py-4">Type</th>
-              <th className="px-6 py-4">Area</th>
-              <th className="px-6 py-4">Elevation</th>
-              <th className="px-6 py-4">Status</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gis-line">
-            {filteredProperties.length > 0 ? (
-              filteredProperties.map((p, i) => (
-                <tr key={i} className="hover:bg-gis-accent/5 transition-all duration-150 cursor-pointer group">
-                  <td className="px-6 py-4 font-mono text-xs font-bold text-gis-accent truncate max-w-[150px]" title={p.ulpin}>{p.ulpin}</td>
-                  <td className="px-6 py-4 text-xs font-medium text-gis-ink">{p.buildingId}</td>
-                  <td className="px-6 py-4 font-medium text-gis-ink">{p.floor}</td>
-                  <td className="px-6 py-4 font-bold text-gis-ink">{p.unit}</td>
-                  <td className="px-6 py-4 text-gis-muted">{p.type}</td>
-                  <td className="px-6 py-4 font-medium text-gis-ink">{p.area.toLocaleString()} sq ft</td>
-                  <td className="px-6 py-4 text-xs font-mono text-gis-muted">{p.z.toFixed(2)} m</td>
-                  <td className="px-6 py-4">
-                    <span className={`px-3 py-1 rounded-full text-[10px] font-bold transition-colors ${
-                      p.status === 'Validated' ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' :
-                      p.status === 'Pending' ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' : 'bg-red-500/10 text-red-500 border border-red-500/20'
-                    }`}>
-                      {p.status}
-                    </span>
-                  </td>
-                </tr>
-              ))
-            ) : (
-              <tr className="animate-fade-in-up">
-                <td colSpan="8" className="px-6 py-20 text-center text-gis-muted font-medium">
-                  <div className="flex flex-col items-center gap-3 opacity-50">
-                    <SearchIcon size={40} />
-                    <p>No matching property records found in the registry.</p>
-                  </div>
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Property Units ({filteredUnits.length})</CardTitle>
+        </CardHeader>
+        <CardBody className="p-0">
+          {filteredUnits.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="text-gis-muted border-b border-gis-border">
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider">Unit ULPIN</th>
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider">Type</th>
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider">Floor</th>
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider">Area</th>
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gis-border/50">
+                  {filteredUnits.slice(0, 50).map((u) => (
+                    <tr key={u.id} className="hover:bg-gis-surface/30 cursor-pointer transition-colors">
+                      <td className="px-4 py-3 font-mono text-xs text-gis-accent">{u.ulpin}</td>
+                      <td className="px-4 py-3 text-gis-ink">{u.type}</td>
+                      <td className="px-4 py-3 text-gis-muted">{u.floorLevel}</td>
+                      <td className="px-4 py-3 text-gis-ink">{u.area.toLocaleString()} m²</td>
+                      <td className="px-4 py-3"><StatusBadge status={u.status} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {filteredUnits.length > 50 && (
+                <p className="text-xs text-gis-muted text-center py-3">Showing 50 of {filteredUnits.length} units</p>
+              )}
+            </div>
+          ) : (
+            <EmptyState icon={Filter} title="No units found" description="Try adjusting your search or filters" />
+          )}
+        </CardBody>
+      </Card>
     </div>
   );
 };

@@ -1,45 +1,358 @@
+@import 'leaflet/dist/leaflet.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  font-family: 'Inter', 'Plus Jakarta Sans', system-ui, sans-serif;
+  --gis-bg: #0A0A0F;
+  --gis-panel: #111118;
+  --gis-card: #16161F;
+  --gis-border: #2A2A35;
+  --gis-accent: #FF1E3C;
+  --gis-accent-hover: #FF4560;
+  --gis-secondary: #FF6A00;
+  --gis-success: #10B981;
+  --gis-warning: #F59E0B;
+  --gis-error: #EF4444;
+  --gis-muted: #8A8A96;
+  --gis-ink: #E8E8F0;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--gis-border) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--gis-border);
+  border-radius: 3px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--gis-muted);
 }
 
 body {
   margin: 0;
-  background-color: #0A0A0F;
-  color: #FFFFFF;
-  overflow-x: hidden;
+  background-color: var(--gis-bg);
+  color: var(--gis-ink);
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+}
+
+@layer base {
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-bold tracking-tight;
+  }
 }
 
 @layer components {
+  /* === Buttons === */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-all duration-200
+           focus:outline-none focus:ring-2 focus:ring-gis-accent/40 disabled:opacity-50 disabled:cursor-not-allowed
+           select-none cursor-pointer;
+  }
   .btn-primary {
-    @apply px-6 py-3 rounded-full font-bold text-white transition-all duration-300
-           bg-gradient-to-r from-gis-accent to-gis-secondary
-           hover:scale-105 hover:shadow-[0_0_20px_rgba(255,30,60,0.4)]
-           active:scale-95;
+    @apply btn px-4 py-2.5 bg-gis-accent text-white hover:bg-[#FF4560] active:bg-red-700
+           shadow-lg shadow-gis-accent/20;
   }
-
   .btn-secondary {
-    @apply px-6 py-3 rounded-full font-semibold text-white transition-all duration-300
-           bg-gis-card border border-gis-line hover:border-gis-accent
-           hover:text-gis-accent;
+    @apply btn px-4 py-2.5 bg-gis-card text-gis-ink border border-gis-border hover:border-gis-accent/50
+           hover:bg-gis-surface;
+  }
+  .btn-ghost {
+    @apply btn px-4 py-2.5 text-gis-muted hover:text-gis-ink hover:bg-gis-surface;
+  }
+  .btn-danger {
+    @apply btn px-4 py-2.5 bg-gis-error/10 text-gis-error border border-gis-error/30 hover:bg-gis-error/20;
+  }
+  .btn-success {
+    @apply btn px-4 py-2.5 bg-gis-success/10 text-gis-success border border-gis-success/30 hover:bg-gis-success/20;
+  }
+  .btn-sm {
+    @apply px-3 py-1.5 text-xs;
+  }
+  .btn-lg {
+    @apply px-6 py-3 text-base;
+  }
+  .btn-icon {
+    @apply p-2 rounded-lg text-gis-muted hover:text-gis-ink hover:bg-gis-surface transition-all;
   }
 
-  .card-ultra {
-    @apply bg-gis-card border border-gis-line rounded-3xl p-6 transition-all duration-500
-           hover:border-gis-accent hover:shadow-[0_0_30px_rgba(255,30,60,0.1)]
-           backdrop-blur-xl;
+  /* === Cards === */
+  .card {
+    @apply bg-gis-card border border-gis-border rounded-xl transition-all duration-200;
+  }
+  .card-hover {
+    @apply card hover:border-gis-accent/30 hover:shadow-lg hover:shadow-gis-accent/5;
+  }
+  .card-header {
+    @apply flex items-center justify-between p-4 border-b border-gis-border;
+  }
+  .card-body {
+    @apply p-4;
   }
 
-  .text-gradient {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-gis-accent to-gis-secondary;
+  /* === Inputs === */
+  .input {
+    @apply w-full px-3 py-2.5 bg-gis-input border border-gis-border rounded-lg text-gis-ink
+           placeholder:text-gis-muted/60 outline-none transition-all duration-200
+           focus:border-gis-accent/50 focus:ring-2 focus:ring-gis-accent/20;
+  }
+  .input-search {
+    @apply input pl-10;
+  }
+  .select {
+    @apply input appearance-none cursor-pointer pr-8;
+  }
+
+  /* === Badges === */
+  .badge {
+    @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium border;
+  }
+  .badge-success {
+    @apply badge bg-gis-success/10 text-gis-success border-gis-success/20;
+  }
+  .badge-warning {
+    @apply badge bg-gis-warning/10 text-gis-warning border-gis-warning/20;
+  }
+  .badge-error {
+    @apply badge bg-gis-error/10 text-gis-error border-gis-error/20;
+  }
+  .badge-info {
+    @apply badge bg-gis-accent/10 text-gis-accent border-gis-accent/20;
+  }
+  .badge-secondary {
+    @apply badge bg-gis-secondary/10 text-gis-secondary border-gis-secondary/20;
+  }
+  .badge-muted {
+    @apply badge bg-gis-surface text-gis-muted border-gis-border;
+  }
+
+  /* === Navigation === */
+  .nav-item {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-gis-muted hover:text-gis-ink
+           hover:bg-gis-surface transition-all duration-200 cursor-pointer text-sm font-medium;
+  }
+  .nav-item-active {
+    @apply nav-item bg-gis-accent/10 text-gis-accent border border-gis-accent/20;
+  }
+
+  /* === Tables === */
+  .table-container {
+    @apply overflow-x-auto;
+  }
+  .table {
+    @apply w-full text-left text-sm;
+  }
+  .table th {
+    @apply px-4 py-3 text-xs font-semibold text-gis-muted uppercase tracking-wider border-b border-gis-border bg-gis-surface/50;
+  }
+  .table td {
+    @apply px-4 py-3 border-b border-gis-border/50;
+  }
+  .table tr:hover td {
+    @apply bg-gis-surface/30;
+  }
+
+  /* === Sidebar === */
+  .sidebar {
+    @apply h-full bg-gis-panel border-r border-gis-border flex flex-col transition-all duration-300;
+  }
+  .sidebar-collapsed {
+    @apply w-16;
+  }
+  .sidebar-expanded {
+    @apply w-64;
+  }
+
+  /* === Map Controls === */
+  .map-control {
+    @apply bg-gis-card/90 backdrop-blur-sm border border-gis-border rounded-lg p-2
+           text-gis-ink hover:bg-gis-surface hover:border-gis-accent/30 transition-all cursor-pointer
+           shadow-lg;
+  }
+  .map-control-active {
+    @apply map-control bg-gis-accent/10 border-gis-accent/30 text-gis-accent;
+  }
+
+  /* === Tooltips === */
+  .tooltip {
+    @apply absolute z-50 px-2.5 py-1.5 text-xs font-medium bg-gis-surface border border-gis-border
+           rounded-lg shadow-xl text-gis-ink whitespace-nowrap pointer-events-none;
+  }
+
+  /* === Progress === */
+  .progress-bar {
+    @apply h-1.5 bg-gis-border rounded-full overflow-hidden;
+  }
+  .progress-fill {
+    @apply h-full bg-gis-accent rounded-full transition-all duration-500 ease-out;
+  }
+
+  /* === Skeleton Loading === */
+  .skeleton {
+    @apply bg-gis-surface rounded animate-pulse;
+  }
+
+  /* === Status Dot === */
+  .status-dot {
+    @apply w-2 h-2 rounded-full;
+  }
+  .status-dot-success {
+    @apply status-dot bg-gis-success;
+  }
+  .status-dot-warning {
+    @apply status-dot bg-gis-warning;
+  }
+  .status-dot-error {
+    @apply status-dot bg-gis-error;
+  }
+  .status-dot-info {
+    @apply status-dot bg-gis-accent;
+  }
+
+  /* === Overlay Background === */
+  .bg-overlay {
+    background:
+      radial-gradient(ellipse at 20% 50%, rgba(255, 30, 60, 0.02) 0%, transparent 50%),
+      radial-gradient(ellipse at 80% 20%, rgba(255, 106, 0, 0.02) 0%, transparent 50%),
+      radial-gradient(ellipse at 50% 80%, rgba(255, 30, 60, 0.015) 0%, transparent 50%);
+  }
+
+  /* === 3D Viewport === */
+  .viewport-3d {
+    @apply relative bg-gis-bg rounded-xl overflow-hidden border border-gis-border;
+  }
+
+  /* === Leaflet Overrides === */
+  .leaflet-container {
+    background: var(--gis-bg) !important;
+    font-family: 'Inter', sans-serif !important;
+  }
+  .leaflet-popup-content-wrapper {
+    background: var(--gis-card) !important;
+    color: var(--gis-ink) !important;
+    border: 1px solid var(--gis-border) !important;
+    border-radius: 12px !important;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.5) !important;
+  }
+  .leaflet-popup-tip {
+    background: var(--gis-card) !important;
+    border: 1px solid var(--gis-border) !important;
+  }
+  .leaflet-popup-close-button {
+    color: var(--gis-muted) !important;
+  }
+  .leaflet-control-zoom a {
+    background: var(--gis-card) !important;
+    color: var(--gis-ink) !important;
+    border-color: var(--gis-border) !important;
+  }
+  .leaflet-control-zoom a:hover {
+    background: var(--gis-surface) !important;
+  }
+  .leaflet-control-attribution {
+    background: rgba(10, 10, 15, 0.8) !important;
+    color: var(--gis-muted) !important;
+    font-size: 10px !important;
+  }
+  .leaflet-control-attribution a {
+    color: var(--gis-muted) !important;
+  }
+
+  /* === Timeline === */
+  .timeline-item {
+    @apply relative pl-8 pb-6;
+  }
+  .timeline-item::before {
+    content: '';
+    @apply absolute left-[11px] top-6 bottom-0 w-px bg-gis-border;
+  }
+  .timeline-item:last-child::before {
+    @apply hidden;
+  }
+  .timeline-dot {
+    @apply absolute left-0 top-1.5 w-[22px] h-[22px] rounded-full border-2 flex items-center justify-center;
+  }
+
+  /* === Metric Card === */
+  .metric-card {
+    @apply card p-5 flex flex-col gap-3;
+  }
+  .metric-value {
+    @apply text-3xl font-bold text-gis-ink tabular-nums;
+  }
+  .metric-label {
+    @apply text-xs font-medium text-gis-muted uppercase tracking-wider;
+  }
+
+  /* === Modal === */
+  .modal-overlay {
+    @apply fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4;
+  }
+  .modal-content {
+    @apply bg-gis-card border border-gis-border rounded-2xl shadow-2xl max-w-lg w-full max-h-[80vh]
+           overflow-y-auto animate-scale-in;
+  }
+  .modal-header {
+    @apply flex items-center justify-between p-5 border-b border-gis-border;
+  }
+  .modal-body {
+    @apply p-5;
+  }
+
+  /* === Tabs === */
+  .tab {
+    @apply px-4 py-2 text-sm font-medium text-gis-muted hover:text-gis-ink border-b-2
+           border-transparent hover:border-gis-border transition-all cursor-pointer;
+  }
+  .tab-active {
+    @apply tab text-gis-accent border-gis-accent;
+  }
+
+  /* === Dropdown === */
+  .dropdown {
+    @apply absolute right-0 top-full mt-1 bg-gis-card border border-gis-border rounded-xl
+           shadow-xl py-1 min-w-[180px] z-50 animate-fade-in;
+  }
+  .dropdown-item {
+    @apply w-full flex items-center gap-2 px-3 py-2 text-sm text-gis-ink hover:bg-gis-surface
+           transition-colors cursor-pointer;
   }
 }
 
-.animate-gradient-bg {
-  background: linear-gradient(-45deg, #0A0A0F, #1A0A0A, #0A0A0F, #14100F);
-  background-size: 400% 400%;
-  animation: gradientX 15s ease infinite;
+@layer utilities {
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-gis-accent to-gis-secondary;
+  }
+  .text-gradient-success {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-gis-success to-gis-accent;
+  }
+  .border-gradient {
+    border-image: linear-gradient(135deg, var(--gis-accent), var(--gis-secondary)) 1;
+  }
+  .glass {
+    @apply bg-gis-card/60 backdrop-blur-xl border border-gis-border/50;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
 }

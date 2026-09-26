@@ -1,103 +1,159 @@
-import { generate3DIdentifier, generatePropertyId } from '../utils/identifiers';
+import { create } from 'zustand';
+import { generateNeighborhood } from './neighborhood';
 
-const INITIAL_BUILDINGS = [
-  {
-    id: 'B001',
-    code: 'ESB',
-    name: 'Empire State Building',
-    address: '350 Fifth Avenue, New York City',
-    city: 'New York',
-    floors: 102,
-    height: 380,
-    type: 'Commercial',
-    status: 'Validated',
+const DEMO_NEIGHBORHOOD = generateNeighborhood();
+
+const INITIAL_STATE = {
+  activePage: 'dashboard',
+  sidebarCollapsed: false,
+
+  neighborhood: DEMO_NEIGHBORHOOD,
+  parcels: DEMO_NEIGHBORHOOD.parcels,
+  buildings: DEMO_NEIGHBORHOOD.buildings,
+  units: DEMO_NEIGHBORHOOD.units,
+  roads: DEMO_NEIGHBORHOOD.roads,
+  greenSpaces: DEMO_NEIGHBORHOOD.greenSpaces,
+
+  // Selection
+  selectedParcel: null,
+  selectedBuilding: null,
+  selectedUnit: null,
+  selectedFloor: null,
+
+  // 3D layer toggles
+  showFloors: true,
+  showUnits: true,
+  showNeighborhood: true,
+  showLabels: true,
+
+  // Camera focus
+  cameraFocus: 'neighborhood', // 'reference' | 'neighborhood' | buildingId | 'unit:<id>'
+
+  // Map state
+  mapCenter: [DEMO_NEIGHBORHOOD.center.lat, DEMO_NEIGHBORHOOD.center.lng],
+  mapZoom: 15,
+  activeMapLayers: {
+    parcels: true,
+    buildings: true,
+    roads: true,
+    greenSpaces: true,
+    units: false,
   },
-  {
-    id: 'B002',
-    code: 'SKY',
-    name: 'Skyline Residency',
-    address: 'Baner Road, Pune',
-    city: 'Pune',
-    floors: 20,
-    height: 65,
-    type: 'Residential',
-    status: 'Validated',
-  },
-  {
-    id: 'B003',
-    code: 'TP1',
-    name: 'TechPark One',
-    address: 'Hinjewadi Phase 1, Pune',
-    city: 'Pune',
-    floors: 12,
-    height: 45,
-    type: 'Commercial',
-    status: 'Validated',
-  },
-];
 
-const PROPERTY_TYPES = [
-  'Residential',
-  'Commercial',
-  'Office',
-  'Retail',
-  'Parking',
-  'Common Area',
-];
+  // Extraction
+  extractionResults: null,
+  isExtracting: false,
+  extractionStep: '',
+  extractionProgress: 0,
 
-export const initStore = () => {
-  const savedBuildings = localStorage.getItem('ulpin_buildings');
-  const savedProperties = localStorage.getItem('ulpin_properties');
+  // Activity log
+  activities: [
+    { id: 1, message: 'Neighborhood data loaded — 1 reference + 8 buildings + 4 houses', type: 'info', timestamp: new Date().toISOString() },
+    { id: 2, message: '15-floor reference building with 75 units generated', type: 'success', timestamp: new Date().toISOString() },
+    { id: 3, message: 'All ULPINs generated hierarchically', type: 'success', timestamp: new Date().toISOString() },
+    { id: 4, message: 'Demo mode — no real AI backend connected', type: 'warning', timestamp: new Date().toISOString() },
+  ],
 
-  let buildings = savedBuildings
-    ? JSON.parse(savedBuildings)
-    : INITIAL_BUILDINGS;
+  // Filters
+  searchQuery: '',
+  landUseFilter: '',
+  statusFilter: '',
 
-  let properties = savedProperties
-    ? JSON.parse(savedProperties)
-    : generateInitialProperties(buildings);
-
-  localStorage.setItem('ulpin_buildings', JSON.stringify(buildings));
-  localStorage.setItem('ulpin_properties', JSON.stringify(properties));
-
-  return { buildings, properties };
+  // Spatial data layers
+  spatialLayers: [
+    { id: 'parcels', name: 'Parcels', visible: true, count: DEMO_NEIGHBORHOOD.parcels.length },
+    { id: 'buildings', name: 'Buildings', visible: true, count: DEMO_NEIGHBORHOOD.buildings.length },
+    { id: 'roads', name: 'Roads', visible: true, count: DEMO_NEIGHBORHOOD.roads.length },
+    { id: 'units', name: 'Property Units', visible: false, count: DEMO_NEIGHBORHOOD.units.length },
+    { id: 'greenSpaces', name: 'Green Spaces', visible: true, count: DEMO_NEIGHBORHOOD.greenSpaces.length },
+  ],
 };
 
-function generateInitialProperties(buildings) {
-  const props = [];
+export const useStore = create((set, get) => ({
+  ...INITIAL_STATE,
 
-  buildings.forEach(b => {
-    for (let f = 1; f <= b.floors; f++) {
-      const floorId = `${b.id}-F${String(f).padStart(3, '0')}`;
-      const zBottom = (f - 1) * (b.height / b.floors);
-      const zTop = f * (b.height / b.floors);
+  setActivePage: (page) => set({ activePage: page }),
+  toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
 
-      // Each floor has 6 units for demo
-      for (let u = 1; u <= 6; u++) {
-        const unitNum = `${f}${String.fromCharCode(64 + u)}`;
-        props.push({
-          id: generatePropertyId(b.code, f, u),
-          ulpin: generate3DIdentifier(b.code, f, u),
-          buildingId: b.id,
-          floorId: floorId,
-          floor: f,
-          unit: unitNum,
-          type: PROPERTY_TYPES[(f + u) % PROPERTY_TYPES.length],
-          area: 1200 + u * 115 + (f % 7) * 35,
-          zBottom: Number(zBottom.toFixed(2)),
-          zTop: Number(zTop.toFixed(2)),
-          x: Number(((u - 3.5) * 4.8).toFixed(2)),
-          y: Number(((u % 3) - 1) * 3.2).toFixed(2),
-          z: Number(((zBottom + zTop) / 2).toFixed(2)),
-          status: (f % 17 === 0) ? 'Pending' : (f % 29 === 0) ? 'Needs Review' : 'Validated',
-          updated: '2026-09-11',
-          occupancy: (f + u) % 3 === 0 ? 'Vacant' : 'Occupied',
-        });
-      }
+  selectParcel: (parcel) => set({ selectedParcel: parcel, selectedBuilding: null, selectedUnit: null, selectedFloor: null }),
+  selectBuilding: (building) => set({ selectedBuilding: building, selectedUnit: null, selectedFloor: null }),
+  selectUnit: (unit) => set({ selectedUnit: unit }),
+  // Select an apartment together with its building + floor context (used by 3D unit clicks).
+  selectApartment: (unit, building) => set({
+    selectedUnit: unit,
+    selectedBuilding: building || null,
+    selectedFloor: unit ? unit.floorLevel : null,
+    selectedParcel: null,
+  }),
+  selectFloor: (floor) => set({ selectedFloor: floor, selectedUnit: null }),
+  clearSelection: () => set({ selectedParcel: null, selectedBuilding: null, selectedUnit: null, selectedFloor: null }),
+
+  setMapCenter: (center) => set({ mapCenter: center }),
+  setMapZoom: (zoom) => set({ mapZoom: zoom }),
+  toggleMapLayer: (layerId) => set((s) => ({
+    activeMapLayers: { ...s.activeMapLayers, [layerId]: !s.activeMapLayers[layerId] }
+  })),
+
+  // 3D layer toggles
+  toggleFloors: () => set((s) => ({ showFloors: !s.showFloors })),
+  toggleUnits: () => set((s) => ({ showUnits: !s.showUnits })),
+  toggleNeighborhood: () => set((s) => ({ showNeighborhood: !s.showNeighborhood })),
+  toggleLabels: () => set((s) => ({ showLabels: !s.showLabels })),
+
+  setCameraFocus: (focus) => set({ cameraFocus: focus }),
+
+  startExtraction: () => set({ isExtracting: true, extractionProgress: 0, extractionStep: 'Initializing...' }),
+  updateExtraction: (step, progress) => set({ extractionStep: step, extractionProgress: progress }),
+  completeExtraction: (results) => set({
+    isExtracting: false,
+    extractionResults: results,
+    extractionProgress: 100,
+    extractionStep: 'Complete',
+    activities: [...get().activities, {
+      id: Date.now(),
+      message: `AI extraction complete — ${results.buildings.length} buildings detected`,
+      type: 'success',
+      timestamp: new Date().toISOString(),
+    }],
+  }),
+  resetExtraction: () => set({ isExtracting: false, extractionResults: null, extractionProgress: 0, extractionStep: '' }),
+
+  addActivity: (message, type = 'info') => set((s) => ({
+    activities: [...s.activities, { id: Date.now(), message, type, timestamp: new Date().toISOString() }],
+  })),
+
+  setSearchQuery: (q) => set({ searchQuery: q }),
+  setLandUseFilter: (f) => set({ landUseFilter: f }),
+  setStatusFilter: (f) => set({ statusFilter: f }),
+
+  toggleSpatialLayer: (layerId) => set((s) => ({
+    spatialLayers: s.spatialLayers.map(l => l.id === layerId ? { ...l, visible: !l.visible } : l),
+  })),
+
+  generateUlpinForParcel: (parcelId) => {
+    const parcel = get().parcels.find(p => p.id === parcelId);
+    if (parcel) {
+      get().addActivity(`ULPIN generated for parcel ${parcelId}`, 'success');
+      return parcel.ulpin;
     }
-  });
+    return null;
+  },
+}));
 
-  return props;
+// Dev-only: expose the store on window so e2e/debug scripts (and the browser
+// console) can drive selection and verify the info panel. Stripped in production.
+if (import.meta.env.DEV) {
+  window.__ULPIN_STORE__ = useStore;
 }
 
-export { PROPERTY_TYPES };
+// Selectors
+export const useParcels = () => useStore((s) => s.parcels);
+export const useBuildings = () => useStore((s) => s.buildings);
+export const useUnits = () => useStore((s) => s.units);
+export const useSelectedParcel = () => useStore((s) => s.selectedParcel);
+export const useSelectedBuilding = () => useStore((s) => s.selectedBuilding);
+export const useSelectedUnit = () => useStore((s) => s.selectedUnit);
+export const useSelectedFloor = () => useStore((s) => s.selectedFloor);
+export const useExtractionResults = () => useStore((s) => s.extractionResults);
+export const useActivities = () => useStore((s) => s.activities);
+export const useMapLayers = () => useStore((s) => s.activeMapLayers);

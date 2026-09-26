@@ -1,51 +1,117 @@
-import React from 'react';
-import { Building, Layers, Box, CheckCircle, Clock, ArrowRight, Globe } from 'lucide-react';
+import React, { useState, Suspense } from 'react';
+import { Building, Map, Hash, Cpu, TrendingUp, ArrowRight, Clock, CheckCircle, AlertCircle, Maximize2, Box } from 'lucide-react';
+import { useStore } from '../data/store';
+import MetricCard from '../components/ui/MetricCard';
+import Card, { CardBody, CardHeader, CardTitle } from '../components/ui/Card';
+import StatusBadge from '../components/ui/StatusBadge';
+import { PageLoading } from '../components/ui/LoadingState';
 
-const KPICard = ({ label, value, subtext, icon: Icon, color }) => (
-  <div className="card-premium p-6 animate-fade-in-up group">
-    <div className="flex justify-between items-start mb-4">
-      <div className={`p-3 rounded-xl ${color} bg-opacity-20 text-current transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3`}>
-        {Icon && <Icon size={24} className={color.replace('bg-', 'text-')} />}
-      </div>
-    </div>
-    <p className="text-sm text-gis-muted font-semibold tracking-wide uppercase truncate">{label}</p>
-    <p className="text-2xl lg:text-4xl font-black text-gis-ink mt-2 tracking-tight truncate">{value}</p>
-    <p className="text-xs text-gis-muted mt-2 font-medium opacity-70 truncate">{subtext}</p>
-  </div>
-);
+// Lazy-load the 3D preview to keep initial page load fast
+const Dashboard3DPreview = React.lazy(() => import('../components/Dashboard3DPreview'));
 
-const Dashboard = ({ store, setActivePage }) => {
-  if (!store) return <div>Loading...</div>;
+const Dashboard = () => {
+  const { parcels, buildings, units, activities, setActivePage, selectParcel, selectBuilding } = useStore();
+  const [preview3D, setPreview3D] = useState(true);
 
-  const buildings = store.buildings || [];
-  const properties = store.properties || [];
-
-  const totalBuildings = buildings.length;
-  const totalFloors = buildings.reduce((sum, b) => sum + (b.floors || 0), 0);
-  const totalUnits = properties.length;
-  const validatedUnits = properties.filter(p => p?.status === 'Validated').length;
-  const pendingUnits = properties.filter(p => p?.status !== 'Validated').length;
-  const validationRate = totalUnits > 0 ? ((validatedUnits / totalUnits) * 100).toFixed(1) : '0.0';
+  const totalArea = parcels.reduce((s, p) => s + p.area, 0);
+  const avgConfidence = buildings.length > 0
+    ? (buildings.reduce((s, b) => s + b.confidence, 0) / buildings.length * 100).toFixed(1)
+    : 0;
+  const validatedUnits = units.filter(u => u.status === 'Validated').length;
 
   return (
-    <div className="space-y-8 animate-fade-in-up">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-        <KPICard label="Total Buildings" value={totalBuildings} subtext="Registered structures" icon={Building} color="bg-blue-500" />
-        <KPICard label="Total Floors" value={totalFloors} subtext="Vertical levels" icon={Layers} color="bg-purple-500" />
-        <KPICard label="Property Units" value={totalUnits.toLocaleString()} subtext="Spatial records" icon={Box} color="bg-indigo-500" />
-        <KPICard label="Validated" value={`${validationRate}%`} subtext={`${validatedUnits.toLocaleString()} verified`} icon={CheckCircle} color="bg-emerald-500" />
-        <KPICard label="Pending" value={pendingUnits.toLocaleString()} subtext="Requires review" icon={Clock} color="bg-amber-500" />
+    <div className="p-6 space-y-6 bg-overlay min-h-full animate-fade-in">
+      {/* Metrics — preserved */}
+      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+        <MetricCard label="Total Parcels" value={parcels.length} subtext="Registered land parcels" icon={Map} color="text-gis-accent" />
+        <MetricCard label="Buildings" value={buildings.length} subtext="Detected structures" icon={Building} color="text-gis-secondary" />
+        <MetricCard label="Units" value={units.length} subtext="Individual flats" icon={Hash} color="text-gis-success" />
+        <MetricCard label="Total Area" value={`${(totalArea / 1000).toFixed(1)}k`} subtext="Square meters" icon={TrendingUp} color="text-gis-warning" />
+        <MetricCard label="AI Accuracy" value={`${avgConfidence}%`} subtext="Avg confidence" icon={Cpu} color="text-gis-accent" />
+        <MetricCard label="Validated" value={validatedUnits} subtext="Verified units" icon={CheckCircle} color="text-gis-success" />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 card-premium p-8">
-          <div className="flex items-center gap-3 mb-8">
-            <div className="p-2 bg-gis-accent/20 text-gis-accent rounded-lg">
-              <Globe size={20} />
+      {/* NEW: Embedded 3D Preview + Reference Building */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Embedded 3D Preview — same scene as full 3D page */}
+        <Card className="overflow-hidden">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Box size={16} className="text-gis-accent" />
+              3D Property Map — Live Preview
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setPreview3D(!preview3D)}
+                className="text-xs text-gis-muted hover:text-gis-accent transition-colors"
+              >
+                {preview3D ? 'Hide' : 'Show'}
+              </button>
+              <button
+                onClick={() => setActivePage('map3d')}
+                className="flex items-center gap-1 text-xs text-gis-accent hover:text-gis-accent-hover transition-colors"
+              >
+                <Maximize2 size={12} /> Expand
+              </button>
             </div>
-            <h3 className="text-xl font-bold text-gis-ink tracking-tight">3D Property Registry Workflow</h3>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-7 gap-4">
+          </CardHeader>
+          {preview3D && (
+            <div className="h-[350px] relative">
+              <Suspense fallback={<PageLoading />}>
+                <Dashboard3DPreview />
+              </Suspense>
+              {/* Overlay hint */}
+              <div className="absolute bottom-3 left-3 right-3 flex justify-between items-end pointer-events-none">
+                <div className="bg-gis-card/80 backdrop-blur-sm px-3 py-1.5 rounded-lg border border-gis-border">
+                  <p className="text-[10px] text-gis-muted">Click any building to inspect its ULPIN</p>
+                </div>
+              </div>
+            </div>
+          )}
+        </Card>
+
+        {/* Reference Building — preserved */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Building size={16} className="text-gis-accent" />
+              Reference Building
+            </CardTitle>
+            <StatusBadge status="Validated" />
+          </CardHeader>
+          <CardBody>
+            <div className="p-4 rounded-xl bg-gis-surface border border-gis-border relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-gis-accent/5 rounded-full -mr-10 -mt-10 blur-2xl" />
+              <p className="text-lg font-bold text-gis-ink mb-1 relative z-10">Empire State Building</p>
+              <p className="text-sm text-gis-muted mb-4 relative z-10">350 Fifth Avenue, New York City</p>
+              <div className="grid grid-cols-2 gap-y-3 text-xs relative z-10">
+                <span className="text-gis-muted font-medium">Floors:</span>
+                <span className="text-gis-ink font-bold">102</span>
+                <span className="text-gis-muted font-medium">Roof Height:</span>
+                <span className="text-gis-ink font-bold">~380 m</span>
+                <span className="text-gis-muted font-medium">Type:</span>
+                <span className="text-gis-ink font-bold">Commercial</span>
+                <span className="text-gis-muted font-medium">Status:</span>
+                <span className="text-gis-success font-bold flex items-center gap-1">
+                  <CheckCircle size={12} /> Verified
+                </span>
+              </div>
+            </div>
+            <button
+              onClick={() => setActivePage('map3d')}
+              className="btn-primary w-full mt-4 flex items-center justify-center gap-2"
+            >
+              Open 3D Property Map <ArrowRight size={16} />
+            </button>
+          </CardBody>
+        </Card>
+      </div>
+
+      {/* Workflow strip — preserved */}
+      <Card>
+        <CardBody>
+          <h4 className="text-xs font-semibold text-gis-muted uppercase tracking-wider mb-4">3D Property Registry Workflow</h4>
+          <div className="grid grid-cols-2 md:grid-cols-7 gap-3">
             {[
               { step: '01', label: 'Building', sub: 'Registration' },
               { step: '02', label: '3D', sub: 'Segmentation' },
@@ -55,96 +121,120 @@ const Dashboard = ({ store, setActivePage }) => {
               { step: '06', label: 'Validation', sub: 'Spatially Valid' },
               { step: '07', label: 'Registry', sub: 'Final Record' },
             ].map((item, i) => (
-              <div key={i} className="relative p-4 text-center rounded-2xl bg-gis-bg border border-gis-line transition-all duration-300 hover:border-gis-accent/50 hover:-translate-y-1 group">
-                <span className="block text-2xl font-black text-gis-accent mb-1 group-hover:scale-110 transition-transform">{item.step}</span>
-                <span className="block text-xs font-bold text-gis-ink">{item.label}</span>
-                <span className="block text-[10px] text-gis-muted font-medium">{item.sub}</span>
+              <div key={i} className="relative p-3 text-center rounded-xl bg-gis-surface border border-gis-border hover:border-gis-accent/30 transition-all group">
+                <span className="block text-xl font-bold text-gis-accent mb-1 group-hover:scale-110 transition-transform">{item.step}</span>
+                <span className="block text-xs font-semibold text-gis-ink">{item.label}</span>
+                <span className="block text-[10px] text-gis-muted">{item.sub}</span>
                 {i < 6 && (
-                  <div className="hidden md:block absolute -right-3 top-1/2 -translate-y-1/2 z-10">
-                    <ArrowRight size={16} className="text-gis-line group-hover:text-gis-accent transition-colors" />
+                  <div className="hidden md:block absolute -right-2.5 top-1/2 -translate-y-1/2 z-10">
+                    <ArrowRight size={14} className="text-gis-border group-hover:text-gis-accent transition-colors" />
                   </div>
                 )}
               </div>
             ))}
           </div>
-        </div>
-        <div className="card-premium p-8 flex flex-col justify-between">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-gis-accent/20 text-gis-accent rounded-lg">
-              <Building size={20} />
+        </CardBody>
+      </Card>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Quick Actions */}
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle>Quick Actions</CardTitle>
+            <span className="text-xs text-gis-muted bg-gis-surface px-2 py-1 rounded-full">Demo Data</span>
+          </CardHeader>
+          <CardBody>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {[
+                { label: 'AI Extraction', icon: Cpu, page: 'extraction', color: 'text-gis-accent' },
+                { label: '2D Map', icon: Map, page: 'map2d', color: 'text-gis-success' },
+                { label: '3D Model', icon: Building, page: 'map3d', color: 'text-gis-secondary' },
+                { label: 'ULPIN Gen', icon: Hash, page: 'ulpin', color: 'text-gis-warning' },
+              ].map((action) => (
+                <button
+                  key={action.page}
+                  onClick={() => setActivePage(action.page)}
+                  className="flex flex-col items-center gap-2 p-4 rounded-xl bg-gis-surface hover:bg-gis-input border border-gis-border hover:border-gis-accent/30 transition-all group"
+                >
+                  <action.icon size={24} className={`${action.color} group-hover:scale-110 transition-transform`} />
+                  <span className="text-xs font-medium text-gis-ink">{action.label}</span>
+                </button>
+              ))}
             </div>
-            <h3 className="text-xl font-bold text-gis-ink tracking-tight">Reference Building</h3>
-          </div>
-          <div className="p-6 rounded-2xl bg-gis-bg border border-gis-line relative overflow-hidden group">
-            <div className="absolute top-0 right-0 w-24 h-24 bg-gis-accent/5 rounded-full -mr-12 -mt-12 blur-2xl group-hover:bg-gis-accent/10 transition-colors" />
-            <p className="text-lg font-black text-gis-ink mb-1 relative z-10">Empire State Building</p>
-            <p className="text-sm text-gis-muted mb-4 relative z-10">350 Fifth Avenue, New York City</p>
-            <div className="grid grid-cols-2 gap-y-3 text-xs relative z-10">
-              <span className="text-gis-muted font-medium">Floors:</span> <span className="text-gis-ink font-bold">102</span>
-              <span className="text-gis-muted font-medium">Roof Height:</span> <span className="text-gis-ink font-bold">~380 m</span>
-              <span className="text-gis-muted font-medium">Status:</span>
-              <span className="text-emerald-500 font-bold flex items-center gap-1">
-                <CheckCircle size={12} /> Verified
-              </span>
+          </CardBody>
+        </Card>
+
+        {/* Activity Feed */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Recent Activity</CardTitle>
+            <Clock size={16} className="text-gis-muted" />
+          </CardHeader>
+          <CardBody className="max-h-[250px] overflow-y-auto">
+            <div className="space-y-3">
+              {activities.slice(0, 6).map((activity) => (
+                <div key={activity.id} className="flex items-start gap-3 p-2 rounded-lg hover:bg-gis-surface/50 transition-colors">
+                  <div className={`mt-0.5 ${
+                    activity.type === 'success' ? 'text-gis-success' :
+                    activity.type === 'warning' ? 'text-gis-warning' :
+                    activity.type === 'error' ? 'text-gis-error' : 'text-gis-accent'
+                  }`}>
+                    {activity.type === 'success' ? <CheckCircle size={14} /> :
+                     activity.type === 'warning' ? <AlertCircle size={14} /> :
+                     <Clock size={14} />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-gis-ink leading-relaxed">{activity.message}</p>
+                    <p className="text-[10px] text-gis-muted mt-0.5">
+                      {new Date(activity.timestamp).toLocaleTimeString()}
+                    </p>
+                  </div>
+                </div>
+              ))}
             </div>
-          </div>
-          <button
-            onClick={() => setActivePage('map')}
-            className="btn-premium w-full mt-8 py-4 px-6 bg-gis-accent text-white rounded-2xl font-bold flex items-center justify-center gap-3 shadow-lg shadow-gis-accent/20"
-          >
-            Open 3D Property Map <ArrowRight size={20} />
-          </button>
-        </div>
+          </CardBody>
+        </Card>
       </div>
 
-      <div className="card-premium p-8">
-        <div className="flex justify-between items-center mb-8">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-gis-accent/20 text-gis-accent rounded-lg">
-              <Box size={20} />
-            </div>
-            <h3 className="text-xl font-bold text-gis-ink tracking-tight">Recent Property Records</h3>
-          </div>
-          <span className="text-xs font-medium text-gis-muted bg-gis-bg px-3 py-1 rounded-full border border-gis-line">
-            Prototype demonstration dataset
-          </span>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="text-gis-muted border-b border-gis-line">
-                <th className="pb-4 pl-4 font-semibold uppercase tracking-wider text-[11px]">Proposed 3D ULPIN</th>
-                <th className="pb-4 font-semibold uppercase tracking-wider text-[11px]">Building</th>
-                <th className="pb-4 font-semibold uppercase tracking-wider text-[11px]">Floor</th>
-                <th className="pb-4 font-semibold uppercase tracking-wider text-[11px]">Unit</th>
-                <th className="pb-4 font-semibold uppercase tracking-wider text-[11px]">Type</th>
-                <th className="pb-4 font-semibold uppercase tracking-wider text-[11px]">Status</th>
-                <th className="pb-4 pr-4 font-semibold uppercase tracking-wider text-[11px]">Updated</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gis-line">
-              {properties.slice(0, 6).map((p, i) => (
-                <tr key={i} className="group hover:bg-gis-accent/5 transition-all duration-150 cursor-pointer">
-                  <td className="py-4 pl-4 font-mono text-xs font-bold text-gis-accent truncate max-w-[150px]" title={p.ulpin}>{p.ulpin}</td>
-                  <td className="py-4 text-gis-ink font-medium">{p.buildingId}</td>
-                  <td className="py-4 text-gis-ink">{p.floor}</td>
-                  <td className="py-4 text-gis-ink">{p.unit}</td>
-                  <td className="py-4 text-gis-muted">{p.type}</td>
-                  <td className="py-4">
-                    <span className={`px-3 py-1 rounded-full text-[10px] font-bold transition-colors ${
-                      p.status === 'Validated' ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' :
-                      p.status === 'Pending' ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' : 'bg-red-500/10 text-red-500 border border-red-500/20'
-                    }`}>
-                      {p.status}
-                    </span>
-                  </td>
-                  <td className="py-4 pr-4 text-gis-muted italic">{p.updated}</td>
+      {/* Recent Parcels Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent Parcels</CardTitle>
+          <button onClick={() => setActivePage('spatial')} className="text-xs text-gis-accent hover:text-gis-accent-hover flex items-center gap-1">
+            View All <ArrowRight size={12} />
+          </button>
+        </CardHeader>
+        <CardBody className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="text-gis-muted border-b border-gis-border">
+                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider">ULPIN</th>
+                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider">Land Use</th>
+                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider">Area</th>
+                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider">Buildings</th>
+                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider">Status</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+              </thead>
+              <tbody className="divide-y divide-gis-border/50">
+                {parcels.slice(0, 6).map((p) => (
+                  <tr
+                    key={p.id}
+                    className="hover:bg-gis-surface/30 cursor-pointer transition-colors"
+                    onClick={() => { selectParcel(p); setActivePage('ulpin'); }}
+                  >
+                    <td className="px-4 py-3 font-mono text-xs text-gis-accent">{p.ulpin}</td>
+                    <td className="px-4 py-3 text-gis-ink">{p.landUse}</td>
+                    <td className="px-4 py-3 text-gis-muted">{p.area.toLocaleString()} m²</td>
+                    <td className="px-4 py-3 text-gis-ink">{p.buildingCount}</td>
+                    <td className="px-4 py-3"><StatusBadge status={p.status} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardBody>
+      </Card>
     </div>
   );
 };
