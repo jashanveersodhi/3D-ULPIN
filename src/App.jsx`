@@ -1,0 +1,44 @@
+import React, { useState, useEffect } from 'react';
+import Layout from './components/layout/Layout';
+import { initStore } from './data/store';
+import './styles/index.css';
+
+const App = () => {
+  const [activePage, setActivePage] = useState('dashboard');
+  const [isPresentation, setIsPresentation] = useState(false);
+  const [store, setStore] = useState(null);
+
+  useEffect(() => {
+    try {
+      const s = initStore();
+      setStore(s || { buildings: [], properties: [] });
+    } catch (e) {
+      console.error("Store Error:", e);
+      setStore({ buildings: [], properties: [] });
+    }
+  }, []);
+
+  if (!store) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-slate-900 text-white text-xl font-bold">
+        Loading Spatial Registry...
+      </div>
+    );
+  }
+
+  return (
+    <Layout
+      activePage={activePage}
+      setActivePage={setActivePage}
+      isPresentation={isPresentation}
+      setIsPresentation={setIsPresentation}
+    >
+      <div className="p-10 text-center">
+        <h1 className="text-4xl font-bold text-gis-ink mb-4">SHELL STABLE ✅</h1>
+        <p className="text-gis-muted text-xl">The layout and store are loading correctly. Now adding the AI pages...</p>
+      </div>
+    </Layout>
+  );
+};
+
+export default App;

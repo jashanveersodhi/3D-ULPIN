@@ -10,7 +10,8 @@ import {
   Presentation,
   PlayCircle,
   Menu,
-  X
+  X,
+  Layers
 } from 'lucide-react';
 
 const Layout = ({ children, activePage, setActivePage, isPresentation, setIsPresentation }) => {
@@ -28,22 +29,22 @@ const Layout = ({ children, activePage, setActivePage, isPresentation, setIsPres
 
   if (isPresentation) {
     return (
-      <div className="min-h-screen bg-gis-bg p-6 animate-fade-in-up">
+      <div className="min-h-screen bg-slate-100 p-6">
         <div className="flex justify-between items-center mb-8">
           <div className="flex items-center gap-4">
-            <div className="bg-gis-accent text-white p-3 rounded-2xl shadow-lg shadow-gis-accent/20">
+            <div className="bg-blue-600 text-white p-3 rounded-2xl">
               <Box size={28} />
             </div>
             <div>
-              <h1 className="text-3xl font-black tracking-tight text-gis-ink">3D ULPIN</h1>
-              <p className="text-sm text-gis-muted font-medium">Vertical Property Identification & Spatial Registry</p>
+              <h1 className="text-3xl font-black text-slate-900">3D ULPIN</h1>
+              <p className="text-sm text-slate-500">Vertical Property Identification</p>
             </div>
           </div>
           <button
             onClick={() => setIsPresentation(false)}
-            className="btn-premium bg-gis-card text-gis-ink border border-gis-line flex items-center gap-2 hover:bg-white/10"
+            className="px-4 py-2 bg-white border rounded-xl flex items-center gap-2"
           >
-            <X size={18} /> Exit Presentation Mode
+            <X size={18} /> Exit
           </button>
         </div>
         {children}
@@ -52,24 +53,16 @@ const Layout = ({ children, activePage, setActivePage, isPresentation, setIsPres
   }
 
   return (
-    <div className="flex min-h-screen bg-gis-bg font-sans selection:bg-gis-accent selection:text-white">
-      {/* Sidebar */}
-      <aside className={`bg-gis-navy/90 backdrop-blur-xl text-white transition-all duration-300 ease-in-out ${isSidebarOpen ? 'w-72' : 'w-20'} flex flex-col border-r border-gis-line shadow-2xl z-20`}>
-        <div className="p-6 border-b border-white/5">
+    <div className="flex h-screen w-full bg-slate-100 font-sans">
+      <aside className={`bg-slate-900 text-white transition-all duration-300 ${isSidebarOpen ? 'w-64' : 'w-20'} flex flex-col border-r border-slate-800`}>
+        <div className="p-6 border-b border-slate-800">
           {isSidebarOpen ? (
-            <div className="animate-fade-in-up">
-              <div className="flex items-center gap-3 mb-1">
-                <div className="bg-gis-accent p-1.5 rounded-lg">
-                  <Box className="text-white" size={20} />
-                </div>
-                <span className="text-xl font-black tracking-tight">3D ULPIN</span>
-              </div>
-              <p className="text-[10px] text-gis-muted font-medium leading-tight opacity-80">Vertical Property Identification & Spatial Registry</p>
+            <div className="flex items-center gap-3">
+              <Box className="text-blue-400" size={20} />
+              <span className="text-xl font-bold">3D ULPIN</span>
             </div>
           ) : (
-            <div className="flex justify-center">
-              <Box className="text-gis-accent" size={24} />
-            </div>
+            <div className="flex justify-center"><Box className="text-blue-400" size={24} /></div>
           )}
         </div>
 
@@ -78,66 +71,47 @@ const Layout = ({ children, activePage, setActivePage, isPresentation, setIsPres
             <button
               key={item.id}
               onClick={() => setActivePage(item.id)}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
-                activePage === item.id
-                  ? 'bg-gis-accent text-white shadow-lg shadow-gis-accent/20'
-                  : 'text-gis-muted hover:bg-white/5 hover:text-white'
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+                activePage === item.id ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
               }`}
-              title={!isSidebarOpen ? item.label : ''}
             >
-              <item.icon size={20} className={`transition-transform duration-200 group-hover:scale-110 ${activePage === item.id ? 'text-white' : 'text-gis-muted group-hover:text-white'}`} />
-              {isSidebarOpen && <span className="text-sm font-semibold">{item.label}</span>}
+              <item.icon size={20} />
+              {isSidebarOpen && <span className="text-sm font-medium">{item.label}</span>}
             </button>
           ))}
+          <button
+            onClick={() => setActivePage('extraction')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+              activePage === 'extraction' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+            }`}
+          >
+            <Layers size={20} />
+            {isSidebarOpen && <span className="text-sm font-medium">AI Extraction</span>}
+          </button>
         </nav>
-
-        <div className="p-6 border-t border-white/5 bg-black/20">
-          {isSidebarOpen ? (
-            <div className="text-[11px] text-gis-muted leading-relaxed animate-fade-in-up">
-              <span className="block font-bold text-gis-ink mb-1">SIH26011 · 2026</span>
-              Prototype data only. Generated identifiers are not official/legal ULPINs.
-            </div>
-          ) : (
-            <div className="text-center text-[10px] font-bold text-gis-muted">SIH26</div>
-          )}
-        </div>
       </aside>
 
-      {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0 relative">
-        <header className="h-20 bg-gis-bg/80 backdrop-blur-md border-b border-gis-line px-8 flex items-center justify-between sticky top-0 z-10">
+        <header className="h-16 bg-white border-b px-8 flex items-center justify-between z-10">
           <div className="flex items-center gap-6">
-            <button
-              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              className="p-2 hover:bg-gis-card rounded-xl text-gis-muted transition-colors border border-transparent hover:border-gis-line"
-            >
+            <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 hover:bg-slate-100 rounded-lg text-slate-600">
               <Menu size={20} />
             </button>
-            <div className="animate-fade-in-up">
-              <h2 className="text-xl font-bold text-gis-ink tracking-tight">
-                {navItems.find(i => i.id === activePage)?.label}
-              </h2>
-              <p className="text-xs text-gis-muted font-medium">Vertical property mapping demonstration</p>
-            </div>
+            <h2 className="text-lg font-bold text-slate-900">
+              {navItems.find(i => i.id === activePage)?.label || 'AI Extraction'}
+            </h2>
           </div>
-
           <div className="flex items-center gap-4">
-            <button
-              onClick={() => setIsPresentation(true)}
-              className="btn-premium flex items-center gap-2 px-4 py-2 text-sm font-semibold text-gis-muted bg-gis-card border border-gis-line hover:text-gis-ink hover:bg-white/5"
-            >
-              <Presentation size={16} /> Presentation Mode
+            <button onClick={() => setIsPresentation(true)} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 border rounded-lg hover:bg-slate-200">
+              Presentation
             </button>
-            <button
-              onClick={() => setActivePage('demo')}
-              className="btn-premium flex items-center gap-2 px-5 py-2 text-sm font-bold text-white bg-gis-accent shadow-lg shadow-gis-accent/20 hover:shadow-gis-accent/40"
-            >
-              <PlayCircle size={16} /> Start Demo
+            <button onClick={() => setActivePage('demo')} className="px-4 py-2 text-sm font-bold text-white bg-blue-600 rounded-lg shadow-md hover:bg-blue-700">
+              Start Demo
             </button>
           </div>
         </header>
 
-        <main className="p-8 overflow-auto animate-fade-in-up">
+        <main className="p-8 overflow-auto h-full">
           {children}
         </main>
       </div>

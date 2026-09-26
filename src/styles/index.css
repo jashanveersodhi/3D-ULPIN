@@ -3,48 +3,43 @@
 @tailwind utilities;
 
 :root {
-  font-family: 'Inter', 'Plus Jakarta Sans', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family: 'Inter', 'Plus Jakarta Sans', system-ui, sans-serif;
 }
 
 body {
   margin: 0;
-  @apply bg-gis-bg text-gis-ink;
+  background-color: #0A0A0F;
+  color: #FFFFFF;
+  overflow-x: hidden;
 }
 
 @layer components {
-  .btn-premium {
-    @apply px-4 py-2 rounded-xl font-semibold transition-all duration-200
-           active:scale-95 hover:brightness-110 shadow-sm;
+  .btn-primary {
+    @apply px-6 py-3 rounded-full font-bold text-white transition-all duration-300
+           bg-gradient-to-r from-gis-accent to-gis-secondary
+           hover:scale-105 hover:shadow-[0_0_20px_rgba(255,30,60,0.4)]
+           active:scale-95;
   }
 
-  .card-premium {
-    @apply bg-gis-card border border-gis-line rounded-2xl shadow-lg
-           transition-all duration-300 hover:border-gis-accent/50 hover:shadow-gis-accent/10;
+  .btn-secondary {
+    @apply px-6 py-3 rounded-full font-semibold text-white transition-all duration-300
+           bg-gis-card border border-gis-line hover:border-gis-accent
+           hover:text-gis-accent;
+  }
+
+  .card-ultra {
+    @apply bg-gis-card border border-gis-line rounded-3xl p-6 transition-all duration-500
+           hover:border-gis-accent hover:shadow-[0_0_30px_rgba(255,30,60,0.1)]
+           backdrop-blur-xl;
+  }
+
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-gis-accent to-gis-secondary;
   }
 }
 
-@keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-fade-in-up {
-  animation: fadeInUp 0.3s ease-out forwards;
-}
-
-@keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
-}
-
-.animate-shimmer {
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent);
-  background-size: 200% 100%;
-  animation: shimmer 2s infinite linear;
+.animate-gradient-bg {
+  background: linear-gradient(-45deg, #0A0A0F, #1A0A0A, #0A0A0F, #14100F);
+  background-size: 400% 400%;
+  animation: gradientX 15s ease infinite;
 }
