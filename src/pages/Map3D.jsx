@@ -2,7 +2,7 @@ import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, PerspectiveCamera, Text, Line } from '@react-three/drei';
 import * as THREE from 'three';
-import { Box, RotateCcw, Tag, X, Building, Layers, Home, Crosshair, Hash, Map as MapIcon } from 'lucide-react';
+import { Box, RotateCcw, Tag, X, Building, Layers, Home, Crosshair, Hash, Map as MapIcon, AlertTriangle, ShieldCheck } from 'lucide-react';
 import { useStore } from '../data/store';
 import Card, { CardBody, CardHeader, CardTitle } from '../components/ui/Card';
 import StatusBadge from '../components/ui/StatusBadge';
@@ -15,13 +15,13 @@ function latLngTo3D(lat, lng, centerLat, centerLng) {
 }
 
 // Camera controller — frames the reference tower, the whole neighborhood,
-// a specific building, or a close-up of a selected apartment unit.
-function CameraController({ focus, buildings, units, centerLat, centerLng }) {
+// a specific building, a close-up of a selected apartment unit, or the
+// underground infrastructure (basements, parking, metro, station).
+function CameraController({ focus, buildings, units, centerLat, centerLng, viewMode }) {
   const { camera } = useThree();
   const controlsRef = useRef();
 
-  // Bounding box of the whole neighborhood (in 3D meters) — used to frame the
-  // default / reset view so the camera never points at empty space.
+  // Bounding box of the whole neighborhood (in 3D meters).
   const bounds = useMemo(() => {
     const box = new THREE.Box3();
     const v = new THREE.Vector3();
@@ -33,12 +33,39 @@ function CameraController({ focus, buildings, units, centerLat, centerLng }) {
     return box;
   }, [buildings, centerLat, centerLng]);
 
+  // Bounding box of underground units only.
+  const undergroundBounds = useMemo(() => {
+    const box = new THREE.Box3();
+    const v = new THREE.Vector3();
+    units.forEach((u) => {
+      if (!u.bounds) return;
+      box.expandByPoint(v.set(u.bounds.xMin, u.bounds.yMin, u.bounds.zMin));
+      box.expandByPoint(v.set(u.bounds.xMax, u.bounds.yMax, u.bounds.zMax));
+    });
+    return box;
+  }, [units]);
+
   useEffect(() => {
     if (!controlsRef.current) return;
     let target = [0, 20, 0];
     let distance = 230;
 
-    if (focus === 'reference') {
+    if (viewMode === 'underground' && !undergroundBounds.isEmpty()) {
+      const center = undergroundBounds.getCenter(new THREE.Vector3());
+      const sphere = undergroundBounds.getBoundingSphere(new THREE.Sphere());
+      target = [center.x, center.y, center.z];
+      distance = sphere.radius * 2.0;
+    } else if (viewMode === 'all') {
+      const allBounds = new THREE.Box3();
+      allBounds.copy(bounds);
+      if (!undergroundBounds.isEmpty()) allBounds.union(undergroundBounds);
+      if (!allBounds.isEmpty()) {
+        const center = allBounds.getCenter(new THREE.Vector3());
+        const sphere = allBounds.getBoundingSphere(new THREE.Sphere());
+        target = [center.x, center.y, center.z];
+        distance = sphere.radius * 2.2;
+      }
+    } else if (focus === 'reference') {
       const ref = buildings.find(b => b.isReference);
       if (ref) {
         const [cx, , cz] = latLngTo3D(ref.position.lat, ref.position.lng, centerLat, centerLng);
@@ -74,17 +101,24 @@ function CameraController({ focus, buildings, units, centerLat, centerLng }) {
     const dir = camera.position.clone().sub(controlsRef.current.target).normalize();
     camera.position.copy(new THREE.Vector3(...target).add(dir.multiplyScalar(distance)));
     controlsRef.current.update();
-  }, [focus, buildings, units, centerLat, centerLng, camera, bounds]);
+  }, [focus, buildings, units, centerLat, centerLng, camera, bounds, undergroundBounds, viewMode]);
 
-  return <OrbitControls ref={controlsRef} enableDamping dampingFactor={0.05} maxPolarAngle={Math.PI / 2 - 0.05} minDistance={3} maxDistance={400} />;
+  return <OrbitControls ref={controlsRef} enableDamping dampingFactor={0.05} maxPolarAngle={Math.PI * 0.85} minDistance={3} maxDistance={500} />;
 }
 
-function Ground() {
+function Ground({ viewMode }) {
+  const isUnderground = viewMode === 'underground';
+  const isAll = viewMode === 'all';
   return (
     <group>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.05, 0]}>
         <planeGeometry args={[600, 600]} />
-        <meshStandardMaterial color="#0d0d12" />
+        <meshStandardMaterial
+          color="#0d0d12"
+          transparent={isUnderground || isAll}
+          opacity={isUnderground ? 0.08 : isAll ? 0.25 : 1}
+          side={THREE.DoubleSide}
+        />
       </mesh>
       <gridHelper args={[600, 60, '#1a1a25', '#111118']} />
     </group>
@@ -177,7 +211,7 @@ function Parcels({ parcels, centerLat, centerLng, selectedParcel, onSelect }) {
  *   - click a floor slab        → selects that floor
  *   - click the roof/entrance   → selects the whole building
  */
-function ClickableBuilding({ building, buildingUnits, centerLat, centerLng, selectedFloor, selectedUnit, selectedBuilding, onSelectFloor, onSelectUnit, onSelectBuilding, showFloors, showUnits, showLabels }) {
+function ClickableBuilding({ building, buildingUnits, centerLat, centerLng, selectedFloor, selectedUnit, selectedBuilding, onSelectFloor, onSelectUnit, onSelectBuilding, showFloors, showUnits, showLabels, showUnderground = true }) {
   const [hoveredId, setHoveredId] = useState(null);
   const [cx, , cz] = latLngTo3D(building.position.lat, building.position.lng, centerLat, centerLng);
   const w = building.width;
@@ -187,10 +221,17 @@ function ClickableBuilding({ building, buildingUnits, centerLat, centerLng, sele
   const isRef = building.isReference;
   const isBuildingSelected = selectedBuilding?.id === building.id;
 
+  // Filter underground units based on visibility toggle
+  const visibleUnits = useMemo(() => {
+    if (showUnderground) return buildingUnits;
+    return buildingUnits.filter(u => u.unitCategory !== 'underground');
+  }, [buildingUnits, showUnderground]);
+
   // Lay out each floor's apartments on a grid, driven by the real units data.
+  // Units with custom bounds (metro tunnels, stations) use their actual 3D bounds.
   const unitLayout = useMemo(() => {
     const byFloor = {};
-    buildingUnits.forEach((u) => {
+    visibleUnits.forEach((u) => {
       (byFloor[u.floorLevel] = byFloor[u.floorLevel] || []).push(u);
     });
     const layout = [];
@@ -199,6 +240,17 @@ function ClickableBuilding({ building, buildingUnits, centerLat, centerLng, sele
       const cols = Math.min(n, 4);
       const rows = Math.ceil(n / cols);
       floorUnits.forEach((unit, i) => {
+        // Use custom bounds if available (metro tunnels, stations)
+        if (unit.bounds) {
+          const b = unit.bounds;
+          layout.push({
+            unit,
+            pos: [(b.xMin + b.xMax) / 2, (b.yMin + b.yMax) / 2, (b.zMin + b.zMax) / 2],
+            size: [b.xMax - b.xMin, b.yMax - b.yMin, b.zMax - b.zMin],
+            shade: i % 5,
+          });
+          return;
+        }
         const col = i % cols;
         const row = Math.floor(i / cols);
         const uw = w / cols - 0.3;
@@ -210,7 +262,7 @@ function ClickableBuilding({ building, buildingUnits, centerLat, centerLng, sele
       });
     });
     return layout;
-  }, [buildingUnits, w, d, fh]);
+  }, [visibleUnits, w, d, fh]);
 
   // One shared box geometry for every apartment (scaled per-mesh) — keeps the
   // scene light even with hundreds of units.
@@ -337,7 +389,7 @@ function ClickableBuilding({ building, buildingUnits, centerLat, centerLng, sele
 }
 
 // Scene
-function NeighborhoodScene({ parcels, buildings, units, roads, greenSpaces, centerLat, centerLng, selectedParcel, selectedBuilding, selectedFloor, selectedUnit, onSelectParcel, onSelectBuilding, onSelectFloor, onSelectUnit, showFloors, showUnits, showNeighborhood, showLabels, cameraFocus }) {
+function NeighborhoodScene({ parcels, buildings, units, roads, greenSpaces, centerLat, centerLng, selectedParcel, selectedBuilding, selectedFloor, selectedUnit, onSelectParcel, onSelectBuilding, onSelectFloor, onSelectUnit, showFloors, showUnits, showNeighborhood, showLabels, showUnderground, cameraFocus }) {
   const refBuilding = buildings.find(b => b.isReference);
   const neighborhoodBuildings = buildings.filter(b => !b.isReference);
 
@@ -367,6 +419,7 @@ function NeighborhoodScene({ parcels, buildings, units, roads, greenSpaces, cent
           selectedFloor={selectedFloor} selectedUnit={selectedUnit} selectedBuilding={selectedBuilding}
           onSelectFloor={onSelectFloor} onSelectUnit={onSelectUnit} onSelectBuilding={onSelectBuilding}
           showFloors={showFloors} showUnits={showUnits} showLabels={showLabels}
+          showUnderground={showUnderground}
         />
       )}
 
@@ -377,6 +430,7 @@ function NeighborhoodScene({ parcels, buildings, units, roads, greenSpaces, cent
           selectedFloor={selectedFloor} selectedUnit={selectedUnit} selectedBuilding={selectedBuilding}
           onSelectFloor={onSelectFloor} onSelectUnit={onSelectUnit} onSelectBuilding={onSelectBuilding}
           showFloors={showFloors} showUnits={showUnits} showLabels={showLabels}
+          showUnderground={showUnderground}
         />
       ))}
     </>
@@ -407,9 +461,10 @@ const Map3D = () => {
     parcels, buildings, roads, greenSpaces, units,
     selectedParcel, selectedBuilding, selectedUnit, selectedFloor,
     selectParcel, selectBuilding, selectUnit, selectApartment, selectFloor, clearSelection,
-    showFloors, showUnits, showNeighborhood, showLabels,
-    toggleFloors, toggleUnits, toggleNeighborhood, toggleLabels,
-    cameraFocus, setCameraFocus, setActivePage
+    showFloors, showUnits, showNeighborhood, showLabels, showUnderground,
+    toggleFloors, toggleUnits, toggleNeighborhood, toggleLabels, toggleUnderground,
+    cameraFocus, setCameraFocus, setActivePage,
+    topologyConflicts, topologyValid, topologyChecked, runTopologyValidation
   } = useStore();
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -464,6 +519,7 @@ const Map3D = () => {
                     onSelectBuilding={handleSelectBuilding}
                     onSelectFloor={handleSelectFloor} onSelectUnit={handleSelectUnit}
                     showFloors={showFloors} showUnits={showUnits} showNeighborhood={showNeighborhood} showLabels={showLabels}
+                    showUnderground={showUnderground}
                     cameraFocus={cameraFocus}
                   />
                 </Canvas>
@@ -478,7 +534,11 @@ const Map3D = () => {
               <Button size="sm" variant={showUnits ? 'primary' : 'secondary'} icon={Home} onClick={toggleUnits}>Units</Button>
               <Button size="sm" variant={showNeighborhood ? 'primary' : 'secondary'} icon={Building} onClick={toggleNeighborhood}>Neighborhood</Button>
               <Button size="sm" variant={showLabels ? 'primary' : 'secondary'} icon={Tag} onClick={toggleLabels}>Labels</Button>
+              <Button size="sm" variant={showUnderground ? 'primary' : 'secondary'} icon={Box} onClick={toggleUnderground}>Underground</Button>
               <Button size="sm" variant={showMiniMap ? 'primary' : 'secondary'} icon={MapIcon} onClick={() => setShowMiniMap(v => !v)}>2D Map</Button>
+              <Button size="sm" variant={topologyChecked && !topologyValid ? 'danger' : 'secondary'} icon={topologyChecked && !topologyValid ? AlertTriangle : ShieldCheck} onClick={runTopologyValidation}>
+                {topologyChecked && !topologyValid ? `⚠ ${topologyConflicts.length} Conflict${topologyConflicts.length > 1 ? 's' : ''}` : 'Topology Check'}
+              </Button>
             </div>
 
             {/* Bottom-left stats */}
@@ -529,21 +589,95 @@ const Map3D = () => {
                   </div>
                   <div className="p-3 rounded-lg bg-gis-surface border border-gis-border">
                     <span className="text-[10px] font-semibold text-gis-muted uppercase tracking-wider">Floor</span>
-                    <p className="text-sm font-bold text-gis-ink mt-1">{selectedUnit.floorLevel} / {buildings.find(b => b.id === selectedUnit.buildingId)?.floors}</p>
+                    <p className="text-sm font-bold text-gis-ink mt-1">
+                      {selectedUnit.floorLevel < 0 ? "B" + Math.abs(selectedUnit.floorLevel) : selectedUnit.floorLevel}
+                      {selectedUnit.floorLevel > 0 && selectedUnit.floorLevel <= (buildings.find(b => b.id === selectedUnit.buildingId)?.floors || 0) && " / " + (buildings.find(b => b.id === selectedUnit.buildingId)?.floors || 0)}
+                      {selectedUnit.floorLevel > (buildings.find(b => b.id === selectedUnit.buildingId)?.floors || 0) && " (Air Rights)"}
+                    </p>
                   </div>
                   <div className="p-3 rounded-lg bg-gis-surface border border-gis-border">
                     <span className="text-[10px] font-semibold text-gis-muted uppercase tracking-wider">Type</span>
                     <p className="text-sm font-bold text-gis-ink mt-1">{selectedUnit.type}</p>
                   </div>
                   <div className="p-3 rounded-lg bg-gis-surface border border-gis-border">
+                    <span className="text-[10px] font-semibold text-gis-muted uppercase tracking-wider">Category</span>
+                    <p className="text-sm font-bold text-gis-ink mt-1 capitalize">{selectedUnit.unitCategory || 'residential'}</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-gis-surface border border-gis-border">
                     <span className="text-[10px] font-semibold text-gis-muted uppercase tracking-wider">Area</span>
                     <p className="text-sm font-bold text-gis-ink mt-1">{selectedUnit.area.toLocaleString()} m2</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-gis-surface border border-gis-border">
+                    <span className="text-[10px] font-semibold text-gis-muted uppercase tracking-wider">Elevation</span>
+                    <p className="text-sm font-bold text-gis-ink mt-1">
+                      {selectedUnit.zBottom !== undefined ? `${selectedUnit.zBottom.toFixed(1)} – ${selectedUnit.zTop.toFixed(1)} m` : `${((selectedUnit.floorLevel - 0.5) * (buildings.find(b => b.id === selectedUnit.buildingId)?.floorHeight || 3)).toFixed(1)} m`}
+                    </p>
                   </div>
                   <div className="p-3 rounded-lg bg-gis-surface border border-gis-border col-span-2">
                     <span className="text-[10px] font-semibold text-gis-muted uppercase tracking-wider">Status</span>
                     <p className={`text-sm font-bold mt-1 ${selectedUnit.status === 'Occupied' ? 'text-gis-success' : selectedUnit.status === 'Vacant' ? 'text-gis-warning' : 'text-gis-error'}`}>{selectedUnit.status}</p>
                   </div>
                 </div>
+
+                {/* Underground-specific info */}
+                {selectedUnit.unitCategory === 'underground' && (
+                  <>
+                    <div className="p-3 rounded-lg bg-gis-surface border border-gis-border">
+                      <span className="text-[10px] font-semibold text-gis-muted uppercase tracking-wider">Depth</span>
+                      <p className="text-sm font-bold text-gis-ink mt-1">{selectedUnit.depth || Math.abs(selectedUnit.zBottom || 0).toFixed(1)} m below ground</p>
+                    </div>
+                    {selectedUnit.metadata && (
+                      <div className="p-3 rounded-lg bg-gis-surface border border-gis-border">
+                        <span className="text-[10px] font-semibold text-gis-muted uppercase tracking-wider">Metadata</span>
+                        <div className="mt-1 space-y-1">
+                          {selectedUnit.metadata.basementLevel && (
+                            <p className="text-xs text-gis-ink">Basement Level: B{Math.abs(selectedUnit.metadata.basementLevel)}</p>
+                          )}
+                          {selectedUnit.metadata.parkingSpace && (
+                            <p className="text-xs text-gis-ink">Parking Space: {selectedUnit.metadata.parkingSpace}</p>
+                          )}
+                          {selectedUnit.metadata.ceilingHeight && (
+                            <p className="text-xs text-gis-ink">Ceiling Height: {selectedUnit.metadata.ceilingHeight} m</p>
+                          )}
+                          {selectedUnit.metadata.tunnelType && (
+                            <p className="text-xs text-gis-ink">Tunnel Type: {selectedUnit.metadata.tunnelType}</p>
+                          )}
+                          {selectedUnit.metadata.corridorId && (
+                            <p className="text-xs text-gis-ink">Corridor: {selectedUnit.metadata.corridorId}</p>
+                          )}
+                          {selectedUnit.metadata.stationName && (
+                            <p className="text-xs text-gis-ink">Station: {selectedUnit.metadata.stationName}</p>
+                          )}
+                          {selectedUnit.metadata.platformArea && (
+                            <p className="text-xs text-gis-ink">Platform Area: {selectedUnit.metadata.platformArea} m²</p>
+                          )}
+                          {selectedUnit.metadata.lines && (
+                            <p className="text-xs text-gis-ink">Lines: {selectedUnit.metadata.lines.join(', ')}</p>
+                          )}
+                          {selectedUnit.metadata.startCoordinate && (
+                            <p className="text-xs text-gis-ink font-mono text-[10px]">
+                              Start: ({selectedUnit.metadata.startCoordinate.x}, {selectedUnit.metadata.startCoordinate.y}, {selectedUnit.metadata.startCoordinate.z})
+                            </p>
+                          )}
+                          {selectedUnit.metadata.endCoordinate && (
+                            <p className="text-xs text-gis-ink font-mono text-[10px]">
+                              End: ({selectedUnit.metadata.endCoordinate.x}, {selectedUnit.metadata.endCoordinate.y}, {selectedUnit.metadata.endCoordinate.z})
+                            </p>
+                          )}
+                          {selectedUnit.metadata.width && (
+                            <p className="text-xs text-gis-ink">Width: {selectedUnit.metadata.width} m</p>
+                          )}
+                          {selectedUnit.metadata.height && (
+                            <p className="text-xs text-gis-ink">Height: {selectedUnit.metadata.height} m</p>
+                          )}
+                          {selectedUnit.metadata.utilities && (
+                            <p className="text-xs text-gis-ink">Utilities: {selectedUnit.metadata.utilities.join(', ')}</p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
                 <div className="p-3 rounded-lg bg-gis-surface border border-gis-border">
                   <span className="text-[10px] font-semibold text-gis-muted uppercase tracking-wider">Building ULPIN</span>
                   <p className="font-mono text-xs text-gis-ink font-bold mt-1">{buildings.find(b => b.id === selectedUnit.buildingId)?.ulpin}</p>
@@ -632,6 +766,45 @@ const Map3D = () => {
                 <Building size={40} className="mx-auto text-gis-muted/30 mb-3" />
                 <p className="text-sm text-gis-muted">Click any building, floor, or apartment</p>
                 <p className="text-xs text-gis-muted/60 mt-1">All {buildings.length} structures are interactive</p>
+              </div>
+            )}
+
+            {/* ─── Topology Conflicts ─── */}
+            {topologyChecked && !topologyValid && (
+              <div className="mt-4 space-y-3">
+                <div className="p-3 rounded-lg bg-gis-error/10 border border-gis-error/20">
+                  <div className="flex items-center gap-2 mb-2">
+                    <AlertTriangle size={16} className="text-gis-error" />
+                    <span className="text-xs font-bold text-gis-error uppercase tracking-wider">3D Topology Conflict{topologyConflicts.length > 1 ? 's' : ''} Detected</span>
+                  </div>
+                  <div className="space-y-2">
+                    {topologyConflicts.map((c, i) => (
+                      <div key={i} className="p-2.5 rounded-lg bg-gis-error/5 border border-gis-error/10">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-mono text-[10px] text-gis-error font-bold">{c.unitA}</span>
+                          <span className="text-[10px] text-gis-muted">↔</span>
+                          <span className="font-mono text-[10px] text-gis-error font-bold">{c.unitB}</span>
+                        </div>
+                        <p className="text-[10px] text-gis-muted">{c.details}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-[9px] text-gis-muted uppercase tracking-wider">Type:</span>
+                          <span className="text-[9px] font-bold text-gis-ink">{c.type}</span>
+                          <span className="text-[9px] text-gis-muted uppercase tracking-wider ml-2">Intersection:</span>
+                          <span className="text-[9px] font-bold text-gis-ink">{c.intersectionVolume.toFixed(1)} m³</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+            {topologyChecked && topologyValid && (
+              <div className="mt-4 p-3 rounded-lg bg-gis-success/10 border border-gis-success/20">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck size={16} className="text-gis-success" />
+                  <span className="text-xs font-bold text-gis-success uppercase tracking-wider">Topology Valid</span>
+                </div>
+                <p className="text-[10px] text-gis-muted mt-1">No 3D bounding-box conflicts detected across all units.</p>
               </div>
             )}
           </CardBody>

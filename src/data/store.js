@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { generateNeighborhood } from './neighborhood';
+import { validateTopology } from '../utils/validation';
 
 const DEMO_NEIGHBORHOOD = generateNeighborhood();
 
@@ -13,6 +14,8 @@ const INITIAL_STATE = {
   units: DEMO_NEIGHBORHOOD.units,
   roads: DEMO_NEIGHBORHOOD.roads,
   greenSpaces: DEMO_NEIGHBORHOOD.greenSpaces,
+  zones: DEMO_NEIGHBORHOOD.zones || [],
+  surfaceParking: DEMO_NEIGHBORHOOD.surfaceParking || [],
 
   // Selection
   selectedParcel: null,
@@ -25,6 +28,19 @@ const INITIAL_STATE = {
   showUnits: true,
   showNeighborhood: true,
   showLabels: true,
+  showUnderground: true,
+  viewMode: 'all', // 'surface' | 'underground' | 'all'
+  layerVisibility: {
+    surface: true,
+    buildings: true,
+    plots: true,
+    roads: true,
+    parking: true,
+    basements: true,
+    underground: true,
+    metro: true,
+    utilities: true,
+  },
 
   // Camera focus
   cameraFocus: 'neighborhood', // 'reference' | 'neighborhood' | buildingId | 'unit:<id>'
@@ -67,6 +83,11 @@ const INITIAL_STATE = {
     { id: 'units', name: 'Property Units', visible: false, count: DEMO_NEIGHBORHOOD.units.length },
     { id: 'greenSpaces', name: 'Green Spaces', visible: true, count: DEMO_NEIGHBORHOOD.greenSpaces.length },
   ],
+
+  // Topology validation
+  topologyConflicts: [],
+  topologyValid: true,
+  topologyChecked: false,
 };
 
 export const useStore = create((set, get) => ({
@@ -99,6 +120,43 @@ export const useStore = create((set, get) => ({
   toggleUnits: () => set((s) => ({ showUnits: !s.showUnits })),
   toggleNeighborhood: () => set((s) => ({ showNeighborhood: !s.showNeighborhood })),
   toggleLabels: () => set((s) => ({ showLabels: !s.showLabels })),
+  toggleUnderground: () => set((s) => ({ showUnderground: !s.showUnderground })),
+  setViewMode: (mode) => set({ viewMode: mode }),
+  toggleLayer: (layerId) => set((s) => ({
+    layerVisibility: { ...s.layerVisibility, [layerId]: !s.layerVisibility[layerId] }
+  })),
+
+  searchResults: [],
+  isSearching: false,
+  searchByUlpin: (query) => {
+    const { units, buildings, parcels, addActivity } = get();
+    const results = [];
+    const q = query.toLowerCase();
+
+    buildings.forEach(b => {
+      if (b.ulpin.toLowerCase().includes(q) || b.name.toLowerCase().includes(q)) {
+        results.push({ type: 'building', id: b.id, ulpin: b.ulpin, name: b.name, entity: b });
+      }
+    });
+
+    parcels.forEach(p => {
+      if (p.ulpin.toLowerCase().includes(q) || p.id.toLowerCase().includes(q)) {
+        results.push({ type: 'parcel', id: p.id, ulpin: p.ulpin, name: p.landUse, entity: p });
+      }
+    });
+
+    units.forEach(u => {
+      if (u.ulpin.toLowerCase().includes(q) || u.unitNumber.toLowerCase().includes(q)) {
+        const building = buildings.find(b => b.id === u.buildingId);
+        results.push({ type: 'unit', id: u.id, ulpin: u.ulpin, name: u.unitNumber, building, entity: u });
+      }
+    });
+
+    set({ searchResults: results, isSearching: true });
+    addActivity(`Search "${query}" — ${results.length} result(s) found`, results.length > 0 ? 'success' : 'warning');
+    return results;
+  },
+  clearSearch: () => set({ searchResults: [], isSearching: false }),
 
   setCameraFocus: (focus) => set({ cameraFocus: focus }),
 
@@ -129,6 +187,22 @@ export const useStore = create((set, get) => ({
   toggleSpatialLayer: (layerId) => set((s) => ({
     spatialLayers: s.spatialLayers.map(l => l.id === layerId ? { ...l, visible: !l.visible } : l),
   })),
+
+  runTopologyValidation: () => {
+    const { units, addActivity } = get();
+    const result = validateTopology(units);
+    set({
+      topologyConflicts: result.conflicts,
+      topologyValid: result.valid,
+      topologyChecked: true,
+    });
+    if (result.valid) {
+      addActivity(`Topology validation passed — ${result.totalUnitsChecked} units checked, no conflicts`, 'success');
+    } else {
+      addActivity(`Topology validation found ${result.conflicts.length} conflict(s)`, 'error');
+    }
+    return result;
+  },
 
   generateUlpinForParcel: (parcelId) => {
     const parcel = get().parcels.find(p => p.id === parcelId);

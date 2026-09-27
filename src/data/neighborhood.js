@@ -2,6 +2,9 @@
 // apartment is an individual selectable 3D unit with its own unique ULPIN.
 //
 // Hierarchy: Neighborhood → Parcel → Building → Floor → Apartment (ULPIN)
+// Extended: Underground units (ULP-UG-...) and Air-rights units (ULP-AR-...)
+
+import { validateTopology } from '../utils/validation';
 
 const LAND_USES = ['Residential', 'Commercial', 'Mixed-Use', 'Institutional'];
 const BUILDING_TYPES = ['Apartment', 'Office', 'Retail', 'Warehouse'];
@@ -17,6 +20,44 @@ function seededRandom(seed) {
 
 function generateUlpin(prefix, ...parts) {
   return `ULP-${prefix}-${parts.join('-')}`;
+}
+
+// Convert lat/lng to 3D scene coordinates (same formula as Map3D.jsx).
+function latLngTo3D(lat, lng, centerLat, centerLng) {
+  const scale = 111000;
+  return [(lng - centerLng) * scale * Math.cos(centerLat * Math.PI / 180), 0, -(lat - centerLat) * scale];
+}
+
+// Compute the 3D axis-aligned bounding box for a unit, replicating the exact
+// layout algorithm used by ClickableBuilding in Map3D.jsx so that bounds and
+// rendering are always consistent.
+function computeUnitBounds(building, unit, floorUnits, centerLat, centerLng) {
+  const [cx, , cz] = latLngTo3D(building.position.lat, building.position.lng, centerLat, centerLng);
+  const w = building.width;
+  const d = building.depth;
+  const fh = building.floorHeight;
+
+  const n = floorUnits.length;
+  const cols = Math.min(n, 4);
+  const rows = Math.ceil(n / cols);
+  const uw = w / cols - 0.3;
+  const ud = d / rows - 0.3;
+
+  const i = floorUnits.indexOf(unit);
+  const col = i % cols;
+  const row = Math.floor(i / cols);
+  const ux = (col - (cols - 1) / 2) * (w / cols);
+  const uz = (row - (rows - 1) / 2) * (d / rows);
+  const uy = (unit.floorLevel - 0.5) * fh;
+
+  return {
+    xMin: cx + ux - uw / 2,
+    xMax: cx + ux + uw / 2,
+    yMin: uy - (fh - 0.25) / 2,
+    yMax: uy + (fh - 0.25) / 2,
+    zMin: cz + uz - ud / 2,
+    zMax: cz + uz + ud / 2,
+  };
 }
 
 // Convert a footprint (m²) into realistic building width/depth for the 3D scene.
@@ -42,6 +83,8 @@ export function generateNeighborhood(centerLat = 18.5204, centerLng = 73.8567, s
   const units = [];
   const roads = [];
   const greenSpaces = [];
+  const zones = [];
+  const surfaceParking = [];
 
   const refFloors = 15;
   const refFloorHeight = 3.2;
@@ -156,6 +199,7 @@ export function generateNeighborhood(centerLat = 18.5204, centerLng = 73.8567, s
         area: Math.round(unitArea),
         status,
         position: { lat: centerLat, lng: centerLng, z: f * refFloorHeight },
+        unitCategory: 'residential',
       });
     }
   }
@@ -272,6 +316,7 @@ export function generateNeighborhood(centerLat = 18.5204, centerLng = 73.8567, s
           area: Math.round(unitArea),
           status,
           position: { lat: bLat, lng: bLng, z: f * floorHeight },
+          unitCategory: 'residential',
         });
       }
     }
@@ -289,9 +334,231 @@ export function generateNeighborhood(centerLat = 18.5204, centerLng = 73.8567, s
     });
   });
 
+  // ─── Zones ─────────────────────────────────────────────────────────────────
+  const zoneDefs = [
+    { id: 'Z-01', name: 'Residential Zone A', dLat: -0.0006, dLng: 0, area: 12000 },
+    { id: 'Z-02', name: 'Residential Zone B', dLat: 0.0006, dLng: 0, area: 10000 },
+    { id: 'Z-03', name: 'Commercial Zone', dLat: 0, dLng: -0.0008, area: 8000 },
+    { id: 'Z-04', name: 'Mixed-Use Zone', dLat: 0, dLng: 0.0008, area: 9000 },
+  ];
+  zoneDefs.forEach((z) => {
+    zones.push({
+      id: z.id,
+      name: z.name,
+      area: z.area,
+      center: { lat: centerLat + z.dLat, lng: centerLng + z.dLng },
+      polygon: [
+        [centerLat + z.dLat - 0.0006, centerLng + z.dLng - 0.0006],
+        [centerLat + z.dLat - 0.0006, centerLng + z.dLng + 0.0006],
+        [centerLat + z.dLat + 0.0006, centerLng + z.dLng + 0.0006],
+        [centerLat + z.dLat + 0.0006, centerLng + z.dLng - 0.0006],
+      ],
+    });
+  });
+
+  // ─── Surface Parking ──────────────────────────────────────────────────────
+  const parkingDefs = [
+    { id: 'SP-001', name: 'Central Parking Lot', dLat: -0.0002, dLng: -0.0003, spaces: 12, area: 240 },
+    { id: 'SP-002', name: 'East Side Parking', dLat: 0.0003, dLng: 0.0004, spaces: 8, area: 160 },
+    { id: 'SP-003', name: 'West Side Parking', dLat: 0.0003, dLng: -0.0004, spaces: 10, area: 200 },
+  ];
+  parkingDefs.forEach((p) => {
+    const pLat = centerLat + p.dLat;
+    const pLng = centerLng + p.dLng;
+    surfaceParking.push({
+      id: p.id,
+      ulpin: generateUlpin('SP', p.id.split('-')[1]),
+      name: p.name,
+      area: p.area,
+      spaces: p.spaces,
+      position: { lat: pLat, lng: pLng },
+      polygon: [
+        [pLat - 0.00015, pLng - 0.0002],
+        [pLat - 0.00015, pLng + 0.0002],
+        [pLat + 0.00015, pLng + 0.0002],
+        [pLat + 0.00015, pLng - 0.0002],
+      ],
+      status: 'Operational',
+    });
+  });
+
+  // ─── Underground Infrastructure ─────────────────────────────────────────────
+  // Multi-level basements, parking, metro tunnel, station, and utility tunnels.
+  // All underground units have zBottom < 0 (below ground level).
+
+  // Multi-level basements with parking for the reference building
+  const basementLevels = [
+    { level: -1, name: 'Basement 1', type: 'Parking', spaces: 6 },
+    { level: -2, name: 'Basement 2', type: 'Parking', spaces: 4 },
+    { level: -3, name: 'Basement 3', type: 'Utility', spaces: 2 },
+  ];
+
+  basementLevels.forEach((basement) => {
+    for (let i = 1; i <= basement.spaces; i++) {
+      const isParking = basement.type === 'Parking';
+      units.push({
+        id: `${refBuildingId}-B${Math.abs(basement.level)}-P${String(i).padStart(2, '0')}`,
+        ulpin: generateUlpin('U', '0001', '01', `B${Math.abs(basement.level)}`, `P${String(i).padStart(2, '0')}`),
+        buildingId: refBuildingId,
+        parcelId: refParcelId,
+        floorLevel: basement.level,
+        unitNumber: `B${Math.abs(basement.level)}-P${String(i).padStart(2, '0')}`,
+        type: isParking ? 'Parking Space' : 'Utility Area',
+        area: isParking ? 12 + rand() * 8 : 80 + rand() * 40,
+        status: rand() > 0.3 ? 'Occupied' : 'Vacant',
+        position: { lat: centerLat, lng: centerLng, z: basement.level * 3 },
+        unitCategory: 'underground',
+        depth: Math.abs(basement.level) * 3,
+        metadata: {
+          basementLevel: basement.level,
+          parkingSpace: isParking ? `P${String(i).padStart(3, '0')}` : null,
+          ceilingHeight: 2.8,
+        },
+      });
+    }
+  });
+
+  // Metro tunnel — deep underground, long horizontal structure
+  units.push({
+    id: `${refBuildingId}-METRO-TUNNEL`,
+    ulpin: generateUlpin('U', '0001', '01', 'METRO', 'TUNNEL'),
+    buildingId: refBuildingId,
+    parcelId: refParcelId,
+    floorLevel: -5,
+    unitNumber: 'METRO-TUNNEL',
+    type: 'SUBWAY_TUNNEL',
+    area: 2000,
+    status: 'Operational',
+    position: { lat: centerLat, lng: centerLng, z: -13 },
+    unitCategory: 'underground',
+    depth: 15,
+    metadata: {
+      tunnelType: 'SUBWAY_TUNNEL',
+      corridorId: 'METRO-LINE-1',
+      startCoordinate: { x: -100, y: -15, z: 0 },
+      endCoordinate: { x: 100, y: -15, z: 0 },
+      width: 6,
+      height: 4,
+    },
+    bounds: { xMin: -100, xMax: 100, yMin: -15, yMax: -11, zMin: -3, zMax: 3 },
+  });
+
+  // Metro station — connected to tunnel
+  units.push({
+    id: `${refBuildingId}-METRO-STATION`,
+    ulpin: generateUlpin('U', '0001', '01', 'METRO', 'STATION'),
+    buildingId: refBuildingId,
+    parcelId: refParcelId,
+    floorLevel: -5,
+    unitNumber: 'METRO-STATION',
+    type: 'SUBWAY_STATION',
+    area: 500,
+    status: 'Operational',
+    position: { lat: centerLat, lng: centerLng, z: -13 },
+    unitCategory: 'underground',
+    depth: 13,
+    metadata: {
+      stationName: 'Central Metro Station',
+      platformArea: 300,
+      lines: ['METRO-LINE-1'],
+    },
+    bounds: { xMin: -15, xMax: 15, yMin: -14, yMax: -10, zMin: -8, zMax: 8 },
+  });
+
+  // Utility tunnel — intentional overlap with metro station for topology demo
+  units.push({
+    id: `${refBuildingId}-UTILITY-TUNNEL`,
+    ulpin: generateUlpin('U', '0001', '01', 'UTILITY', 'TUNNEL'),
+    buildingId: refBuildingId,
+    parcelId: refParcelId,
+    floorLevel: -4,
+    unitNumber: 'UTILITY-TUNNEL',
+    type: 'UTILITY_TUNNEL',
+    area: 200,
+    status: 'Operational',
+    position: { lat: centerLat, lng: centerLng, z: -12 },
+    unitCategory: 'underground',
+    depth: 12,
+    metadata: {
+      tunnelType: 'UTILITY_TUNNEL',
+      corridorId: 'UTILITY-CORRIDOR-A',
+      utilities: ['water', 'electric', 'telecom'],
+    },
+    // Intentional overlap with metro station for topology demo
+    bounds: { xMin: -10, xMax: 10, yMin: -13, yMax: -10, zMin: -5, zMax: 5 },
+  });
+
+  // ─── Air-Rights Units (ULP-AR-...) ────────────────────────────────────────
+  // Elevated corridors and development zones above the reference building.
+  const airRightsUnits = [
+    {
+      id: `${refBuildingId}-AR-01`,
+      ulpin: generateUlpin('AR', '0001', '01', 'AR', '01'),
+      buildingId: refBuildingId,
+      parcelId: refParcelId,
+      floorLevel: refFloors + 1,
+      unitNumber: 'AR-01',
+      type: 'Elevated Corridor',
+      area: 200,
+      status: 'Vacant',
+      position: { lat: centerLat, lng: centerLng, z: refHeight + 2 },
+      unitCategory: 'air-rights',
+    },
+    {
+      id: `${refBuildingId}-AR-02`,
+      ulpin: generateUlpin('AR', '0001', '01', 'AR', '02'),
+      buildingId: refBuildingId,
+      parcelId: refParcelId,
+      floorLevel: refFloors + 2,
+      unitNumber: 'AR-02',
+      type: 'Air Rights Development',
+      area: 350,
+      status: 'Vacant',
+      position: { lat: centerLat, lng: centerLng, z: refHeight + 6 },
+      unitCategory: 'air-rights',
+    },
+  ];
+  units.push(...airRightsUnits);
+
+  // ─── Compute 3D bounds for all units ─────────────────────────────────────
+  // Group units by building + floor so the layout algorithm matches rendering.
+  const unitsByBuildingFloor = {};
+  units.forEach((u) => {
+    const key = `${u.buildingId}-F${u.floorLevel}`;
+    (unitsByBuildingFloor[key] = unitsByBuildingFloor[key] || []).push(u);
+  });
+
+  const buildingMap = {};
+  buildings.forEach((b) => { buildingMap[b.id] = b; });
+
+  units.forEach((u) => {
+    // Use manually-set bounds if provided (e.g. the intentional conflict unit)
+    if (u.bounds) {
+      u.zBottom = u.bounds.yMin;
+      u.zTop = u.bounds.yMax;
+      return;
+    }
+    const key = `${u.buildingId}-F${u.floorLevel}`;
+    const floorUnits = unitsByBuildingFloor[key];
+    const building = buildingMap[u.buildingId];
+    u.bounds = computeUnitBounds(building, u, floorUnits, centerLat, centerLng);
+    u.zBottom = u.bounds.yMin;
+    u.zTop = u.bounds.yMax;
+  });
+
+  // ─── Topology Validation ─────────────────────────────────────────────────
+  const topologyResult = validateTopology(units);
+  if (!topologyResult.valid) {
+    console.warn(`[validateNeighborhood] ${topologyResult.conflicts.length} 3D topology conflict(s) detected:`);
+    topologyResult.conflicts.forEach((c) => {
+      console.warn(`  ⚠ ${c.unitA} ↔ ${c.unitB}: ${c.details}`);
+    });
+  }
+
   const neighborhood = {
     id: 'NB-001',
     name: 'Demo Neighborhood',
+    ulpin: 'ULP-NB-0001',
     center: { lat: centerLat, lng: centerLng },
     referenceBuildingId: refBuildingId,
     parcels,
@@ -299,6 +566,8 @@ export function generateNeighborhood(centerLat = 18.5204, centerLng = 73.8567, s
     units,
     roads,
     greenSpaces,
+    zones,
+    surfaceParking,
   };
 
   validateNeighborhood(neighborhood);
@@ -338,5 +607,13 @@ export function validateNeighborhood(n) {
   if (incomplete > 0) {
     console.warn(`[validateNeighborhood] ${incomplete} apartment(s) missing required fields.`);
   }
-  console.log(`[validateNeighborhood] OK — ${n.units.length} apartments, ${seen.size} unique ULPINs.`);
+
+  // Topology summary
+  const topo = validateTopology(n.units);
+  const underground = n.units.filter(u => u.unitCategory === 'underground').length;
+  const airRights = n.units.filter(u => u.unitCategory === 'air-rights').length;
+  console.log(`[validateNeighborhood] OK — ${n.units.length} apartments (${underground} underground, ${airRights} air-rights), ${seen.size} unique ULPINs.`);
+  if (!topo.valid) {
+    console.warn(`[validateNeighborhood] ${topo.conflicts.length} 3D topology conflict(s) — see above for details.`);
+  }
 }
